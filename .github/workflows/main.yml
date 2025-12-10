@@ -1,18 +1,15 @@
 name: Build and Push Multi-Arch Docker Images
 
-# 触发条件：
-# 1. 推送到 main 分支时触发 (构建 latest 标签)
-# 2. 推送以 v 开头的 tag 时触发 (例如 v1.0.0)
+# 触发条件
 on:
   push:
     branches: [ "main" ]
     tags: [ "v*.*.*" ]
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
 
 env:
-  # 将此处修改为你的 Docker Hub 用户名
   DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  # 镜像名称前缀
+  # 镜像名定义
   IMAGE_NAME_FRONTEND: 115-bot-web
   IMAGE_NAME_BACKEND: 115-bot-server
 
@@ -23,9 +20,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - context: ./frontend
-            file: ./frontend/Dockerfile
+          # --- 前端配置 (修正点) ---
+          # 因为你的前端文件都在根目录，所以上下文是 "."，Dockerfile 也在 "./Dockerfile"
+          - context: .
+            file: ./Dockerfile
             image_suffix: web
+          
+          # --- 后端配置 (保持不变) ---
           - context: ./backend
             file: ./backend/Dockerfile
             image_suffix: server
@@ -34,11 +35,11 @@ jobs:
       - name: Checkout codebase
         uses: actions/checkout@v4
 
-      # 1. 配置 QEMU (用于模拟 ARM64 架构)
+      # 1. 配置 QEMU (支持 ARM64)
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # 2. 配置 Docker Buildx (用于多架构构建)
+      # 2. 配置 Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -49,7 +50,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 4. 提取元数据 (自动处理 tags 和 labels)
+      # 4. 生成元数据
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -61,7 +62,7 @@ jobs:
             type=ref,event=tag
             type=sha,format=short
 
-      # 5. 构建并推送 (AMD64 + ARM64)
+      # 5. 构建并推送
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
