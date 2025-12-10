@@ -7,3 +7,10 @@ __pycache__
 config.json
 /config
 /logs
+/data
+*.egg-info
+.pytest_cache
+.coverage
+htmlcov
+venv/
+env/
