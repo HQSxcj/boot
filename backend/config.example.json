@@ -1,0 +1,109 @@
+{
+  "admin": {
+    "username": "admin",
+    "password_hash": null,
+    "two_factor_secret": null,
+    "two_factor_enabled": false
+  },
+  "config": {
+    "telegram": {
+      "botToken": "",
+      "adminUserId": "",
+      "whitelistMode": false,
+      "notificationChannelId": ""
+    },
+    "cloud115": {
+      "loginMethod": "cookie",
+      "loginApp": "web",
+      "cookies": "",
+      "userAgent": "",
+      "downloadPath": "",
+      "downloadDirName": "",
+      "autoDeleteMsg": false,
+      "qps": 1
+    },
+    "cloud123": {
+      "enabled": false,
+      "clientId": "",
+      "clientSecret": "",
+      "downloadPath": "",
+      "downloadDirName": "",
+      "qps": 1
+    },
+    "openList": {
+      "enabled": false,
+      "url": "",
+      "mountPath": "",
+      "username": "",
+      "password": ""
+    },
+    "proxy": {
+      "enabled": false,
+      "type": "http",
+      "host": "",
+      "port": "",
+      "username": "",
+      "password": ""
+    },
+    "tmdb": {
+      "apiKey": "",
+      "language": "en-US",
+      "includeAdult": false
+    },
+    "emby": {
+      "enabled": false,
+      "serverUrl": "",
+      "apiKey": "",
+      "refreshAfterOrganize": false,
+      "notifications": {
+        "enabled": false,
+        "forwardToTelegram": false,
+        "includePosters": false,
+        "playbackReportingFreq": "daily"
+      },
+      "missingEpisodes": {
+        "enabled": false,
+        "cronSchedule": "0 0 * * *"
+      }
+    },
+    "strm": {
+      "enabled": false,
+      "outputDir": "",
+      "sourceCid115": "",
+      "urlPrefix115": "",
+      "sourceDir123": "",
+      "urlPrefix123": "",
+      "sourcePathOpenList": "",
+      "urlPrefixOpenList": "",
+      "webdav": {
+        "enabled": false,
+        "port": "8080",
+        "username": "",
+        "password": "",
+        "readOnly": true
+      }
+    },
+    "organize": {
+      "enabled": false,
+      "sourceCid": "",
+      "sourceDirName": "",
+      "targetCid": "",
+      "targetDirName": "",
+      "ai": {
+        "enabled": false,
+        "provider": "openai",
+        "baseUrl": "",
+        "apiKey": "",
+        "model": ""
+      },
+      "rename": {
+        "enabled": false,
+        "movieTemplate": "",
+        "seriesTemplate": "",
+        "addTmdbIdToFolder": false
+      },
+      "movieRules": [],
+      "tvRules": []
+    }
+  }
+}
