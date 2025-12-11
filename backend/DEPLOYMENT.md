@@ -32,6 +32,10 @@ SECRET_KEY=your-random-secret-key-min-32-chars
 JWT_SECRET_KEY=your-jwt-secret-key-min-32-chars
 DATA_PATH=/data/appdata.json
 
+# Database and Secrets (Optional)
+DATABASE_URL=sqlite:////data/secrets.db  # Or use PostgreSQL/MySQL in production
+SECRETS_ENCRYPTION_KEY=your-32-char-encryption-key  # Auto-generated if not provided
+
 # Optional
 PORT=5000
 CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
@@ -222,14 +226,18 @@ sudo systemctl reload nginx
 ## Security Checklist
 
 - [ ] Generate strong random keys for `SECRET_KEY` and `JWT_SECRET_KEY`
+- [ ] Generate strong `SECRETS_ENCRYPTION_KEY` for secret storage
 - [ ] Set proper `CORS_ORIGINS` to your frontend domain(s)
 - [ ] Use HTTPS in production (never plain HTTP)
 - [ ] Set proper file permissions on data directory (chmod 700)
+- [ ] Set proper file permissions on database directory (chmod 700)
 - [ ] Enable firewall rules to restrict access
 - [ ] Set up log rotation for gunicorn logs
 - [ ] Monitor rate limiting and adjust as needed
 - [ ] Enable 2FA for admin account
-- [ ] Regular backups of `/data/appdata.json`
+- [ ] Regular backups of `/data/appdata.json` and `/data/secrets.db`
+- [ ] For production, use PostgreSQL or MySQL instead of SQLite
+- [ ] Rotate encryption keys periodically
 - [ ] Keep dependencies updated
 
 ## Monitoring
@@ -259,21 +267,25 @@ tail -f /var/log/gunicorn/access.log
 ### Backup
 
 ```bash
-# Backup data file
+# Backup data files
 cp /data/appdata.json /backup/appdata-$(date +%Y%m%d).json
+cp /data/secrets.db /backup/secrets-$(date +%Y%m%d).db
 
 # Or with Docker
 docker cp bot-backend:/data/appdata.json /backup/appdata-$(date +%Y%m%d).json
+docker cp bot-backend:/data/secrets.db /backup/secrets-$(date +%Y%m%d).db
 ```
 
 ### Restore
 
 ```bash
-# Restore data file
+# Restore data files
 cp /backup/appdata-20240101.json /data/appdata.json
+cp /backup/secrets-20240101.db /data/secrets.db
 
 # Or with Docker
 docker cp /backup/appdata-20240101.json bot-backend:/data/appdata.json
+docker cp /backup/secrets-20240101.db bot-backend:/data/secrets.db
 docker restart bot-backend
 ```
 

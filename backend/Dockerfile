@@ -7,11 +7,13 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# 安装系统级依赖 (编译 C 扩展库如 cryptography/p115client 可能需要)
+# 安装系统级依赖 (编译 C 扩展库如 cryptography/p115client/SQLAlchemy 需要)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    g++ \
     libc6-dev \
     libffi-dev \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖清单
