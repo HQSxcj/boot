@@ -10,6 +10,9 @@ from persistence.store import DataStore
 from blueprints.auth import auth_bp, init_auth_blueprint
 from blueprints.config import config_bp, init_config_blueprint
 from blueprints.health import health_bp
+from blueprints.cloud115 import cloud115_bp, init_cloud115_blueprint
+from models.database import init_db, get_session_factory
+from services.secret_store import SecretStore
 
 
 def create_app(config=None):
@@ -73,13 +76,25 @@ def create_app(config=None):
     data_path = os.environ.get('DATA_PATH', '/data/appdata.json')
     store = DataStore(data_path)
     
+    # Initialize database and secret store
+    engine = init_db()
+    session_factory = get_session_factory(engine)
+    secret_store = SecretStore(session_factory)
+    
+    # Store secret_store and engine in app context for access in blueprints
+    app.secret_store = secret_store
+    app.db_engine = engine
+    app.session_factory = session_factory
+    
     # Initialize and register blueprints
     init_auth_blueprint(store)
-    init_config_blueprint(store)
+    init_config_blueprint(store, secret_store)
+    init_cloud115_blueprint(secret_store)
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(config_bp)
     app.register_blueprint(health_bp)
+    app.register_blueprint(cloud115_bp)
     
     # Root endpoint
     @app.route('/')

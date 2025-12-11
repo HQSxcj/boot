@@ -10,6 +10,9 @@ Production-ready Flask backend for the 115 Telegram Bot Admin application.
 - **Rate Limiting**: 5 login attempts per minute, 50 requests per hour globally
 - **CORS Support**: Configurable cross-origin resource sharing for SPA
 - **Persistence Layer**: JSON-based data store with thread-safe operations
+- **Secret Storage**: SQLAlchemy-based encrypted secret storage for sensitive credentials
+- **115 Cloud Integration**: QR code login, cookie validation, and session management for 115 cloud
+- **Secret Masking**: Automatic masking of sensitive fields in API responses
 - **Comprehensive Tests**: Unit tests for all endpoints and data operations
 
 ## Project Structure
@@ -17,17 +20,24 @@ Production-ready Flask backend for the 115 Telegram Bot Admin application.
 ```
 backend/
 ├── main.py                 # App factory and entry point
+├── p115_bridge.py         # 115 cloud service wrapper
 ├── blueprints/            # API route blueprints
 │   ├── auth.py           # Authentication endpoints
-│   ├── config.py         # Configuration management
+│   ├── config.py         # Configuration management with secret masking
+│   ├── cloud115.py       # 115 cloud login endpoints
 │   └── health.py         # Health check
 ├── middleware/           # Custom middleware
 │   └── auth.py          # JWT authentication decorator
+├── models/              # Data models
+│   ├── database.py      # SQLAlchemy setup and initialization
+│   └── secret.py        # Secret model for encrypted storage
 ├── persistence/         # Data storage layer
 │   └── store.py        # JSON-based data store
-├── models/             # Data models (for future expansion)
+├── services/           # Business logic services
+│   └── secret_store.py # Encrypted secret storage service
 ├── tests/              # Unit tests
-│   └── test_app.py    # Comprehensive test suite
+│   ├── test_app.py     # Comprehensive test suite
+│   └── test_cloud115.py # 115 cloud integration tests
 └── requirements.txt    # Python dependencies
 ```
 
@@ -47,6 +57,8 @@ Environment variables:
 - `SECRET_KEY`: Flask secret key (default: `dev-secret-key-change-in-production`)
 - `JWT_SECRET_KEY`: JWT signing key (default: `jwt-secret-key-change-in-production`)
 - `DATA_PATH`: Path to JSON data file (default: `/data/appdata.json`)
+- `DATABASE_URL`: SQLAlchemy database URL (default: `sqlite:////data/secrets.db`)
+- `SECRETS_ENCRYPTION_KEY`: Encryption key for secret store (default: auto-generated)
 - `CORS_ORIGINS`: Comma-separated list of allowed origins (default: `http://localhost:5173,http://localhost:3000`)
 - `PORT`: Server port (default: `5000`)
 - `DEBUG`: Enable debug mode (default: `False`)
@@ -185,7 +197,7 @@ Get current user information.
 
 **GET** `/api/config`
 
-Retrieve full application configuration.
+Retrieve full application configuration with sensitive fields masked.
 
 ```json
 // Response (requires Authorization header)
@@ -193,13 +205,17 @@ Retrieve full application configuration.
   "success": true,
   "data": {
     "telegram": {
-      "botToken": "",
+      "botToken": "my-**-token",
       "adminUserId": "",
       "whitelistMode": false,
       "notificationChannelId": ""
     },
-    "cloud115": { ... },
-    "cloud123": { ... },
+    "cloud115": {
+      "loginMethod": "cookie",
+      "cookies": "****",
+      "hasValidSession": false,
+      ...
+    },
     // ... other config sections
   }
 }
@@ -209,23 +225,111 @@ Retrieve full application configuration.
 
 **PUT** `/api/config`
 
-Update application configuration.
+Update application configuration. Sensitive fields are automatically encrypted and stored separately.
 
 ```json
 // Request (requires Authorization header)
 {
   "telegram": {
-    "botToken": "your-token",
+    "botToken": "your-actual-token",
     "adminUserId": "12345",
     ...
   },
   // ... other config sections
 }
 
+// Response (with masked sensitive values)
+{
+  "success": true,
+  "data": { ... } // Updated configuration with masked secrets
+}
+```
+
+### 115 Cloud Integration
+
+#### Start QR Code Login
+
+**POST** `/api/115/login/qrcode`
+
+Start a QR code login session for 115 cloud.
+
+```json
+// Request (requires Authorization header)
+{
+  "loginApp": "web",
+  "loginMethod": "cookie"
+}
+
 // Response
 {
   "success": true,
-  "data": { ... } // Updated configuration
+  "data": {
+    "sessionId": "uuid-string",
+    "qrcode": "base64-encoded-qr-code",
+    "loginMethod": "cookie",
+    "loginApp": "web"
+  }
+}
+```
+
+#### Poll Login Status
+
+**GET** `/api/115/login/status/<sessionId>`
+
+Poll QR code login status. When successful, cookies are automatically persisted.
+
+```json
+// Response (requires Authorization header)
+{
+  "success": true,
+  "data": {
+    "status": "waiting|success",
+    "message": "..."
+  }
+}
+```
+
+#### Ingest Manual Cookies
+
+**POST** `/api/115/login/cookie`
+
+Manually ingest and validate 115 cookies.
+
+```json
+// Request (requires Authorization header)
+{
+  "cookies": {
+    "UID": "...",
+    "CID": "...",
+    "SEID": "..."
+  },
+  "loginApp": "web"
+}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "message": "Cookies validated and stored successfully"
+  }
+}
+```
+
+#### Get Session Health
+
+**GET** `/api/115/session`
+
+Check 115 session health and validity.
+
+```json
+// Response (requires Authorization header)
+{
+  "success": true,
+  "data": {
+    "hasValidSession": true,
+    "lastCheck": "2024-01-01T12:00:00.000000",
+    "message": "Session check complete"
+  }
 }
 ```
 

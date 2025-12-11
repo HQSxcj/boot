@@ -146,7 +146,11 @@ class TestFlaskApp(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)
         self.assertTrue(data['success'])
-        self.assertEqual(data['data']['telegram']['botToken'], 'new-token-123')
+        # Token should be masked in response
+        returned_token = data['data']['telegram']['botToken']
+        self.assertNotEqual(returned_token, 'new-token-123')
+        # But should be stored encrypted in secret store
+        self.assertIn('*', returned_token)
     
     def test_verify_otp_without_2fa_setup(self):
         """Test OTP verification without 2FA setup."""
