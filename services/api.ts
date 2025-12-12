@@ -15,13 +15,13 @@ type CloudDirectoryEntry = {
   date?: string;
 };
 
-const LOCAL_CONFIG_KEY = '115_BOT_CONFIG';
-
 const apiClient = axios.create({
-  baseURL: '/api',
+  // 必须是 /api，配合 vite.config.ts 的 proxy 转发到 8000 端口
+  baseURL: '/api', 
   timeout: 15000,
 });
 
+// 请求拦截器：自动携带 Token
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -30,31 +30,17 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+// 响应拦截器：处理 401 过期
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
       console.warn('Token expired or unauthorized');
+      // 可选：这里可以触发自动登出逻辑
     }
     return Promise.reject(error);
   }
 );
-
-const readLocalConfig = (): AppConfig | null => {
-  const raw = localStorage.getItem(LOCAL_CONFIG_KEY);
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw) as AppConfig;
-  } catch {
-    return null;
-  }
-};
-
-const normalize115LoginMethod = (method: unknown): 'cookie' | 'open_app' => {
-  if (method === 'open_app') return 'open_app';
-  return 'cookie';
-};
 
 export const api = {
   // --- 基础配置与认证 ---
@@ -85,15 +71,18 @@ export const api = {
 
   // --- 115 网盘相关接口 ---
 
-  get115QrCode: async (appType: string) => {
-    const localConfig = readLocalConfig();
-    const loginMethod = normalize115LoginMethod(localConfig?.cloud115?.loginMethod);
-
+  /**
+   * 获取 115 登录二维码
+   * @param appType 模拟的终端类型 (如 android, ios, tv 等)
+   * @param loginMethod 登录方式 ('qrcode' 或 'open_app')
+   */
+  get115QrCode: async (appType: string, loginMethod: string) => {
+    // [修正] 直接使用传入参数，而不是读取可能过期的本地缓存
     const res = await apiClient.post<
       ApiResponse<{ sessionId: string; qrcode: string; loginMethod: string; loginApp: string }>
     >('/115/login/qrcode', {
       loginApp: appType,
-      loginMethod,
+      loginMethod: loginMethod, 
     });
 
     return res.data.data;
@@ -301,10 +290,8 @@ export const api = {
     const res = await apiClient.get<ApiResponse<any[]>>('/logs', { params });
     return res.data.data;
   },
-
-  // =======================================================
-  // 🚀 新增接口：获取全部 loginApp（22 个端）
-  // =======================================================
+  
+  // --- 辅助接口 ---
   get115LoginApps: async () => {
     const res = await apiClient.get<ApiResponse<{ key: string; appId: number }[]>>('/115/login/apps');
     return res.data.data;
