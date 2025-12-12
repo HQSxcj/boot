@@ -327,10 +327,34 @@ export const CloudOrganizeView: React.FC = () => {
 
   // --- Render ---
 
-  if (loading || !config) {
+    // 1. Loading 界面 (正在请求中)
+  if (loading) {
       return (
           <div className="flex h-screen items-center justify-center text-slate-500 gap-2 bg-slate-50 dark:bg-slate-900">
               <RefreshCw className="animate-spin" /> 正在加载配置...
+          </div>
+      );
+  }
+
+  // 2. Error 界面 (请求结束，但没有数据 -> 说明连接失败)
+  if (!config) {
+      return (
+          <div className="flex h-screen flex-col items-center justify-center gap-4 bg-slate-50 dark:bg-slate-900 p-6">
+              <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-full text-red-500">
+                  <AlertCircle size={48} />
+              </div>
+              <div className="text-center">
+                  <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200">无法连接服务器</h3>
+                  <p className="text-slate-500 text-sm mt-1">
+                      请检查后端服务是否启动 (端口 8000)。
+                  </p>
+              </div>
+              <button 
+                  onClick={fetchConfig}
+                  className="px-6 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-bold transition-colors flex items-center gap-2 shadow-lg hover:shadow-brand-500/20"
+              >
+                  <RefreshCw size={16} /> 点击重试
+              </button>
           </div>
       );
   }
