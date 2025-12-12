@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppConfig } from '../types';
-import { api } from '../services/api'; // 引入真实的 API
-import { Save, RefreshCw, KeyRound, User, Smartphone, Wifi, Shield, HardDrive, Cloud, Globe, Film, Bot, CheckCircle2, AlertCircle, Zap, Download, MonitorDown } from 'lucide-react';
+import { api } from '../services/api'; 
+import { Save, RefreshCw, Cookie, QrCode, Smartphone, HardDrive, Cloud, Globe, Film, Bot, CheckCircle2, AlertCircle, Zap, Download, MonitorDown, User, KeyRound, Shield, Check } from 'lucide-react';
 import { SensitiveInput } from '../components/SensitiveInput';
 
 export const UserCenterView: React.FC = () => {
-  // 1. 状态管理：config 初始为 null，等待从后端加载
+  // 1. 状态管理
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -25,11 +25,10 @@ export const UserCenterView: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isPwaInstalled, setIsPwaInstalled] = useState(false);
 
-  // 2. 初始化：加载真实配置
+  // 2. 初始化
   useEffect(() => {
     fetchConfig();
 
-    // PWA 检测逻辑
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setIsPwaInstalled(true);
     }
@@ -41,7 +40,6 @@ export const UserCenterView: React.FC = () => {
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
-  // 从后端获取数据
   const fetchConfig = async () => {
     try {
       const data = await api.getConfig();
@@ -114,7 +112,7 @@ export const UserCenterView: React.FC = () => {
       try {
           const data = await api.setup2FA();
           setTempSecret(data.secret);
-          setQrCodeUri(data.qrCodeUri); // 保存二维码链接
+          setQrCodeUri(data.qrCodeUri); 
           setVerifyCode('');
           setSetupError('');
           setIsSetup2FA(true);
@@ -129,7 +127,7 @@ export const UserCenterView: React.FC = () => {
       setQrCodeUri('');
   };
 
-  // 向后端验证 OTP
+  // [修复部分] 向后端验证 OTP
   const confirm2FASetup = async () => {
       try {
           await api.verify2FA(verifyCode);
@@ -137,8 +135,9 @@ export const UserCenterView: React.FC = () => {
           setIsSetup2FA(false);
           setToast('2FA 已启用');
           setTimeout(() => setToast(null), 3000);
-      } else {
-          setSetupError('验证码错误');
+      } catch (error) {
+          // 这里修复了之前的语法错误 (把 else 改回了 catch)
+          setSetupError('验证码错误或已失效');
       }
   };
 
@@ -156,7 +155,7 @@ export const UserCenterView: React.FC = () => {
   const services = [
     {
         name: '115 网盘',
-        isConnected: !!config.cloud115?.cookies, // 使用 ?. 防止空指针
+        isConnected: !!config.cloud115?.cookies,
         icon: HardDrive,
         colorClass: 'text-orange-600 dark:text-orange-400',
         bgClass: 'bg-orange-50 dark:bg-orange-900/20'
@@ -297,7 +296,7 @@ export const UserCenterView: React.FC = () => {
                 </div>
               </div>
            </div>
-        section>
+        </section>
 
         {/* 2FA 设置 */}
         <section className={`${glassCardClass} flex flex-col`}>
@@ -340,7 +339,6 @@ export const UserCenterView: React.FC = () => {
                   <h4 className="font-bold text-slate-800 dark:text-white mb-4 text-sm">设置步骤</h4>
                   
                   <div className="bg-white/50 dark:bg-slate-900/50 p-4 rounded-xl border-[0.5px] border-slate-200 dark:border-slate-700/50 flex flex-col items-center mb-4">
-                      {/* 这里使用后端传回的 URI 或者二维码生成服务 */}
                       <img 
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrCodeUri)}`}
                         alt="2FA QR"
@@ -383,11 +381,11 @@ export const UserCenterView: React.FC = () => {
            )}
         </section>
 
-        {/* 网络代理设置 - 已完整恢复 */}
+        {/* 网络代理设置 */}
         <section className={`${glassCardClass} lg:col-span-2`}>
           <div className="px-6 py-4 border-b-[0.5px] border-slate-200/50 dark:border-slate-700/50 flex items-center justify-between">
             <div className="flex items-center gap-3">
-               <Wifi size={18} className="text-slate-400" />
+               <Zap size={18} className="text-slate-400" />
                <h3 className="font-bold text-slate-700 dark:text-slate-200">网络代理</h3>
             </div>
             
