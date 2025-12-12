@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppConfig, ClassificationRule, MatchConditionType } from '../types';
 import { api } from '../services/api'; 
-// 确保常量定义文件存在 (src/services/mockConfig.ts)
+// 确保 mockConfig 存在，如果不存在请创建一个空文件或根据需求调整
 import { DEFAULT_MOVIE_RULES, DEFAULT_TV_RULES } from '../services/mockConfig'; 
 import { Save, RefreshCw, Cookie, QrCode, Smartphone, FolderInput, Gauge, Trash2, Plus, Film, Type, Globe, Cloud, Tv, LayoutList, GripVertical, AlertCircle, FolderOutput, Zap, RotateCcw, X, Edit, Check, BrainCircuit, Bot, Loader2 } from 'lucide-react';
 import { SensitiveInput } from '../components/SensitiveInput';
@@ -299,7 +299,6 @@ export const CloudOrganizeView: React.FC = () => {
       updateRenameRule(target === 'movie' ? 'movieTemplate' : 'seriesTemplate', current + ' ' + tag);
   };
 
-  // [核心修复] 只要 Loading 结束就渲染界面，不再卡死
   if (loading) {
       return (
           <div className="flex h-screen items-center justify-center text-slate-500 gap-2 bg-slate-50 dark:bg-slate-900">
@@ -391,10 +390,13 @@ export const CloudOrganizeView: React.FC = () => {
                     </div>
                   )}
 
+                  {/* 扫码与第三方登录区域 */}
                   {(config.cloud115.loginMethod === 'qrcode' || config.cloud115.loginMethod === 'open_app') && (
                      <div className="border-[0.5px] border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-8 flex flex-col items-center justify-center bg-slate-50/50 dark:bg-slate-900/30">
+                        
+                        {/* 场景 A: 第三方 App ID 输入 (仅在 open_app 模式显示) */}
                         {config.cloud115.loginMethod === 'open_app' && (
-                           <div className="w-full max-w-sm mb-6">
+                           <div className="w-full max-w-sm mb-6 animate-in fade-in slide-in-from-bottom-2">
                               <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">App ID</label>
                               <SensitiveInput 
                                 value={config.cloud115.appId || ''} 
@@ -404,42 +406,44 @@ export const CloudOrganizeView: React.FC = () => {
                            </div>
                         )}
                         
+                        {/* 场景 B: 标准扫码 - 模拟终端选择 (仅在 qrcode 模式显示) */}
                         {config.cloud115.loginMethod === 'qrcode' && (
-                            <div className="w-full max-w-sm mb-6">
+                            <div className="w-full max-w-sm mb-6 animate-in fade-in slide-in-from-bottom-2">
                                 <label className="text-xs font-bold text-slate-500 uppercase mb-3 block flex items-center gap-1">
                                     <Smartphone size={14}/> 模拟登录终端 (App Type)
                                 </label>
-                               <select
-  value={config.cloud115.loginApp || 'web'}
-  onChange={(e) => updateNested('cloud115', 'loginApp', e.target.value)}
-  className="w-full px-4 py-2.5 rounded-lg border-[0.5px] border-slate-300/50 dark:border-slate-600/50 bg-white/50 dark:bg-slate-700/50 text-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-brand-500 outline-none backdrop-blur-sm"
->
-  <option value="web">web</option>
-  <option value="pcweb">pcweb</option>
-  <option value="android">android</option>
-  <option value="android_tv">android_tv</option>
-  <option value="ios">ios</option>
-  <option value="ipad">ipad</option>
-  <option value="applet">applet</option>
-  <option value="mini">mini</option>
-  <option value="qandroid">qandroid</option>
-  <option value="desktop">desktop</option>
-  <option value="windows">windows</option>
-  <option value="mac">mac</option>
-  <option value="linux">linux</option>
-  <option value="harmony">harmony</option>
-  <option value="xiaomi">xiaomi</option>
-  <option value="huawei">huawei</option>
-  <option value="oppo">oppo</option>
-  <option value="vivo">vivo</option>
-  <option value="samsung">samsung</option>
-  <option value="browser">browser</option>
-  <option value="client">client</option>
-  <option value="open_app">open_app</option>
-</select>
+                                <select
+                                  value={config.cloud115.loginApp || 'web'}
+                                  onChange={(e) => updateNested('cloud115', 'loginApp', e.target.value)}
+                                  className="w-full px-4 py-2.5 rounded-lg border-[0.5px] border-slate-300/50 dark:border-slate-600/50 bg-white/50 dark:bg-slate-700/50 text-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-brand-500 outline-none backdrop-blur-sm"
+                                >
+                                  <option value="web">web</option>
+                                  <option value="pcweb">pcweb</option>
+                                  <option value="android">android</option>
+                                  <option value="android_tv">android_tv</option>
+                                  <option value="ios">ios</option>
+                                  <option value="ipad">ipad</option>
+                                  <option value="applet">applet</option>
+                                  <option value="mini">mini</option>
+                                  <option value="qandroid">qandroid</option>
+                                  <option value="desktop">desktop</option>
+                                  <option value="windows">windows</option>
+                                  <option value="mac">mac</option>
+                                  <option value="linux">linux</option>
+                                  <option value="harmony">harmony</option>
+                                  <option value="xiaomi">xiaomi</option>
+                                  <option value="huawei">huawei</option>
+                                  <option value="oppo">oppo</option>
+                                  <option value="vivo">vivo</option>
+                                  <option value="samsung">samsung</option>
+                                  <option value="browser">browser</option>
+                                  <option value="client">client</option>
+                                  <option value="open_app">open_app</option>
+                                </select>
                             </div>
                         )}
 
+                        {/* 二维码显示区域 (共用) */}
                         {!qrImage && qrState !== 'loading' ? (
                            <button onClick={generateRealQr} className="px-6 py-3 bg-brand-600 text-white rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg hover:bg-brand-700 transition-colors">
                               <QrCode size={18} />
