@@ -255,7 +255,12 @@ export const CloudOrganizeView: React.FC = () => {
     setQrState('loading');
     setQrImage('');
     try {
-      const data = await api.get115QrCode(config.cloud115.loginApp);
+      // [修改点] 这里的调用增加了第二个参数，确保后端知道是哪种登录方式
+      const data = await api.get115QrCode(
+          config.cloud115.loginApp, 
+          config.cloud115.loginMethod as 'qrcode' | 'open_app'
+      );
+      
       setQrImage(data.qrcode);
       setQrSessionId(data.sessionId);
       setQrState('waiting');
@@ -281,6 +286,7 @@ export const CloudOrganizeView: React.FC = () => {
        setToast("无法获取二维码 (后端未连接)");
     }
   };
+
   
   const handleDirSelect = (cid: string, name: string) => {
      if (selectorTarget === 'download') { updateNested('cloud115', 'downloadPath', cid); updateNested('cloud115', 'downloadDirName', name); } 
