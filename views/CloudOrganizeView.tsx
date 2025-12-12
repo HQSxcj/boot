@@ -409,18 +409,34 @@ export const CloudOrganizeView: React.FC = () => {
                                 <label className="text-xs font-bold text-slate-500 uppercase mb-3 block flex items-center gap-1">
                                     <Smartphone size={14}/> 模拟登录终端 (App Type)
                                 </label>
-                                <select 
-                                    value={config.cloud115.loginApp || 'web'}
-                                    onChange={(e) => updateNested('cloud115', 'loginApp', e.target.value)}
-                                    className="w-full px-4 py-2.5 rounded-lg border-[0.5px] border-slate-300/50 dark:border-slate-600/50 bg-white/50 dark:bg-slate-700/50 text-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-brand-500 outline-none backdrop-blur-sm"
-                                >
-                                    <option value="web">Web 网页版</option>
-                                    <option value="android">Android 客户端</option>
-                                    <option value="ios">iOS 客户端</option>
-                                    <option value="tv">TV 电视端</option>
-                                    <option value="mini">微信小程序</option>
-                                    <option value="qandroid">QAndroid (平板)</option>
-                                </select>
+                               <select
+  value={config.cloud115.loginApp || 'web'}
+  onChange={(e) => updateNested('cloud115', 'loginApp', e.target.value)}
+  className="w-full px-4 py-2.5 rounded-lg border-[0.5px] border-slate-300/50 dark:border-slate-600/50 bg-white/50 dark:bg-slate-700/50 text-slate-800 dark:text-slate-100 text-sm focus:ring-2 focus:ring-brand-500 outline-none backdrop-blur-sm"
+>
+  <option value="web">web</option>
+  <option value="pcweb">pcweb</option>
+  <option value="android">android</option>
+  <option value="android_tv">android_tv</option>
+  <option value="ios">ios</option>
+  <option value="ipad">ipad</option>
+  <option value="applet">applet</option>
+  <option value="mini">mini</option>
+  <option value="qandroid">qandroid</option>
+  <option value="desktop">desktop</option>
+  <option value="windows">windows</option>
+  <option value="mac">mac</option>
+  <option value="linux">linux</option>
+  <option value="harmony">harmony</option>
+  <option value="xiaomi">xiaomi</option>
+  <option value="huawei">huawei</option>
+  <option value="oppo">oppo</option>
+  <option value="vivo">vivo</option>
+  <option value="samsung">samsung</option>
+  <option value="browser">browser</option>
+  <option value="client">client</option>
+  <option value="open_app">open_app</option>
+</select>
                             </div>
                         )}
 
