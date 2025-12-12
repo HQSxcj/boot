@@ -433,3 +433,29 @@ def create_offline_task():
             'success': False,
             'error': f'Failed to create offline task: {str(e)}'
         }), 500
+
+
+
+# ============================================================
+# 🚀 追加的新接口：返回全部 loginApp 端
+# ============================================================
+
+@cloud115_bp.route('/login/apps', methods=['GET'])
+@require_auth
+def list_login_apps():
+    """Return all supported loginApp device profiles."""
+    try:
+        from p115_bridge import ALL_DEVICE_PROFILES_FULL
+
+        apps = [{"key": k, "appId": v} for k, v in ALL_DEVICE_PROFILES_FULL.items()]
+
+        return jsonify({
+            "success": True,
+            "data": apps
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": f"Failed to list login apps: {str(e)}"
+        }), 500
