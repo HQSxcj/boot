@@ -6,6 +6,7 @@ from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
+# 确保这些模块路径在你的项目中存在
 from persistence.store import DataStore
 from blueprints.auth import auth_bp, init_auth_blueprint
 from blueprints.config import config_bp, init_config_blueprint
@@ -33,12 +34,14 @@ def create_app(config=None):
     app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-key-change-in-production')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 
-    # Allow custom config override early so extensions read it (e.g., TESTING for rate limiter)
+    # Allow custom config override early
     if config:
         app.config.update(config)
     
-    # CORS configuration
-    cors_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:5173,http://localhost:3000').split(',')
+    # [微调] CORS configuration - 补充了 18080 端口，增强兼容性
+    default_origins = 'http://localhost:5173,http://localhost:3000,http://localhost:18080,http://127.0.0.1:18080'
+    cors_origins = os.environ.get('CORS_ORIGINS', default_origins).split(',')
+    
     CORS(app, resources={
         r"/api/*": {
             "origins": cors_origins,
@@ -52,7 +55,7 @@ def create_app(config=None):
     # JWT Manager
     jwt = JWTManager(app)
 
-    # In-memory JWT deny list (token revocation)
+    # In-memory JWT deny list
     app.revoked_jti = set()
     app.two_fa_verified_jti = set()
 
@@ -76,7 +79,6 @@ def create_app(config=None):
         enabled=not app.config.get('TESTING', False)
     )
     
-    # Apply rate limiting to auth endpoints
     limiter.limit("5 per minute")(auth_bp)
     
     # Custom error handlers for JWT
@@ -110,22 +112,19 @@ def create_app(config=None):
     session_factory = get_session_factory(engine)
     secret_store = SecretStore(session_factory)
     
-    # Store secret_store and engine in app context for access in blueprints
+    # Store in app context
     app.secret_store = secret_store
     app.db_engine = engine
     app.session_factory = session_factory
     
-    # Initialize cloud115 service
+    # Initialize services
     cloud115_service = Cloud115Service(secret_store)
-    
-    # Initialize cloud123 service
     cloud123_service = Cloud123Service(secret_store)
     
     # Initialize offline task service and poller
     offline_task_service = OfflineTaskService(session_factory, store, None, cloud115_service)
     task_poller = create_task_poller(offline_task_service)
     
-    # Store services in app context
     app.cloud115_service = cloud115_service
     app.cloud123_service = cloud123_service
     app.offline_task_service = offline_task_service
@@ -135,7 +134,7 @@ def create_app(config=None):
     if not app.config.get('TESTING'):
         task_poller.start()
     
-    # Initialize and register blueprints
+    # Initialize blueprints
     init_auth_blueprint(store)
     init_config_blueprint(store, secret_store)
     init_cloud115_blueprint(secret_store)
@@ -169,7 +168,7 @@ def create_app(config=None):
             }
         }), 200
     
-    # Global error handler
+    # Global error handlers
     @app.errorhandler(404)
     def not_found(error):
         return jsonify({
@@ -184,7 +183,6 @@ def create_app(config=None):
             'error': 'Internal server error'
         }), 500
     
-    # Allow custom config override
     if config:
         app.config.update(config)
     
@@ -192,7 +190,6 @@ def create_app(config=None):
 
 
 def get_offline_task_service():
-    """Get the offline task service from the current app context."""
     try:
         from flask import current_app
         return getattr(current_app, 'offline_task_service', None)
@@ -201,7 +198,6 @@ def get_offline_task_service():
 
 
 def get_app():
-    """Get the current app from context."""
     try:
         from flask import current_app
         return current_app
@@ -211,5 +207,6 @@ def get_app():
 
 if __name__ == '__main__':
     app = create_app()
-    port = int(os.environ.get('PORT', 5000))
+    # [关键修改] 默认端口改为 8000，以匹配 Nginx 配置
+    port = int(os.environ.get('PORT', 8000))
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('DEBUG', 'False').lower() == 'true')
