@@ -1,6 +1,7 @@
+import { api } from './api'; // 假设 api.ts 在同级目录
+
 const TOKEN_KEY = 'token';
 const ATTEMPTS_KEY = '115_BOT_LOGIN_ATTEMPTS';
-const TWO_FA_KEY = '115_BOT_2FA_SESSION';
 const MAX_ATTEMPTS = 5;
 
 export interface LoginResult {
@@ -13,16 +14,14 @@ export const checkAuth = (): boolean => {
   return !!localStorage.getItem(TOKEN_KEY);
 };
 
-export const check2FA = (): boolean => {
-  return sessionStorage.getItem(TWO_FA_KEY) === 'true';
-};
-
-export const verify2FA = (code: string): boolean => {
-  if (code === '123456') {
-    sessionStorage.setItem(TWO_FA_KEY, 'true');
-    return true;
+// 修正：调用真实的后端 API 验证 2FA
+export const verify2FA = async (code: string): Promise<boolean> => {
+  try {
+    const result = await api.verify2FA(code);
+    return result.success;
+  } catch (e) {
+    return false;
   }
-  return false;
 };
 
 export const getFailedAttempts = (): number => {
@@ -50,9 +49,7 @@ export const login = async (username: string, password: string): Promise<LoginRe
   try {
     const resp = await fetch('/api/auth/login', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
 
@@ -61,7 +58,6 @@ export const login = async (username: string, password: string): Promise<LoginRe
     if (resp.ok && payload?.success && payload?.data?.token) {
       localStorage.setItem(TOKEN_KEY, payload.data.token);
       resetAttempts();
-      sessionStorage.removeItem(TWO_FA_KEY);
       return { success: true, locked: false };
     }
 
@@ -79,16 +75,13 @@ export const login = async (username: string, password: string): Promise<LoginRe
 
 export const logout = () => {
   const token = localStorage.getItem(TOKEN_KEY);
-
   localStorage.removeItem(TOKEN_KEY);
-  sessionStorage.removeItem(TWO_FA_KEY);
-
-  void fetch('/api/auth/logout', {
-    method: 'POST',
-    headers: token
-      ? {
-          Authorization: `Bearer ${token}`
-        }
-      : undefined
-  }).catch(() => undefined);
+  
+  // 尝试调用后端注销
+  if (token) {
+    fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` }
+    }).catch(() => {});
+  }
 };
