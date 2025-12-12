@@ -8,7 +8,36 @@ export interface TelegramConfig {
 }
 
 export type LoginMethod = 'cookie' | 'qrcode' | 'open_app';
-export type P115LoginApp = 'web' | 'ios' | 'android' | 'tv' | 'qandroid' | 'mini';
+
+/**  
+ * ⭐⭐⭐ 这里是唯一修改的地方 —— 补齐 22 个端 ⭐⭐⭐
+ */
+export type P115LoginApp =
+  | 'web'
+  | 'pcweb'
+  | 'android'
+  | 'android_tv'
+  | 'ios'
+  | 'ipad'
+  | 'applet'
+  | 'mini'
+  | 'qandroid'
+  | 'desktop'
+  | 'windows'
+  | 'mac'
+  | 'linux'
+  | 'harmony'
+  | 'xiaomi'
+  | 'huawei'
+  | 'oppo'
+  | 'vivo'
+  | 'samsung'
+  | 'browser'
+  | 'client'
+  | 'open_app';
+/**  
+ * ⭐⭐⭐ 修改结束，其余全部保持原样 ⭐⭐⭐
+ */
 
 export interface Cloud115Config {
   loginMethod: LoginMethod;
@@ -16,8 +45,8 @@ export interface Cloud115Config {
   cookies: string;
   appId?: string;
   userAgent: string;
-  downloadPath: string; // CID
-  downloadDirName: string; // Display name for UI
+  downloadPath: string;
+  downloadDirName: string;
   autoDeleteMsg: boolean;
   qps: number;
 }
@@ -26,8 +55,8 @@ export interface Cloud123Config {
   enabled: boolean;
   clientId: string;
   clientSecret: string;
-  downloadPath: string; // Offline Download Dir ID
-  downloadDirName: string; // Display name
+  downloadPath: string;
+  downloadDirName: string;
   qps: number;
 }
 
@@ -69,8 +98,8 @@ export interface EmbyConfig {
 
 export interface OpenListConfig {
   enabled: boolean;
-  url: string;      
-  mountPath: string; 
+  url: string;
+  mountPath: string;
   username?: string;
   password?: string;
 }
@@ -102,15 +131,14 @@ export interface RenameRule {
   addTmdbIdToFolder: boolean;
 }
 
-// Complex Classification Types
 export type MatchConditionType = 'genre_ids' | 'original_language' | 'origin_country' | 'release_year';
 
 export interface ClassificationRule {
   id: string;
-  name: string; 
-  targetCid: string; 
+  name: string;
+  targetCid: string;
   conditions: {
-    [key in MatchConditionType]?: string; 
+    [key in MatchConditionType]?: string;
   };
 }
 
@@ -130,7 +158,6 @@ export interface OrganizeConfig {
   targetDirName: string;
   ai: AiConfig;
   rename: RenameRule;
-  // Split strategies
   movieRules: ClassificationRule[];
   tvRules: ClassificationRule[];
 }
@@ -145,7 +172,6 @@ export interface AppConfig {
   emby: EmbyConfig;
   strm: StrmConfig;
   organize: OrganizeConfig;
-  // Global Auth Config
   twoFactorSecret?: string;
 }
 
