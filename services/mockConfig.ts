@@ -1,18 +1,20 @@
-
-import { AppConfig } from '../types';
+import { AppConfig, ClassificationRule } from '../types';
 import { api } from './api';
 
 const STORAGE_KEY = '115_BOT_CONFIG';
 
+// ==========================================
+// 1. 默认预设规则 (Constants)
+// ==========================================
+
 // DEFAULT PRESETS - MOVIES
-export const DEFAULT_MOVIE_RULES = [
+export const DEFAULT_MOVIE_RULES: ClassificationRule[] = [
   { 
     id: 'm_anim', 
     name: '动画电影', 
     targetCid: '', 
     conditions: { 
       genre_ids: '16' 
-      // Language: All, Region: All
     } 
   },
   { 
@@ -21,7 +23,6 @@ export const DEFAULT_MOVIE_RULES = [
     targetCid: '', 
     conditions: { 
       origin_country: 'CN,TW,HK' 
-      // Language: All, Genre: All
     } 
   },
   { 
@@ -29,21 +30,19 @@ export const DEFAULT_MOVIE_RULES = [
     name: '外语电影', 
     targetCid: '', 
     conditions: { 
-      origin_country: '!CN,TW,HK' // Exclude CN, TW, HK
-      // Language: All, Genre: All
+      origin_country: '!CN,TW,HK' 
     } 
   },
 ];
 
 // DEFAULT PRESETS - TV SHOWS
-export const DEFAULT_TV_RULES = [
+export const DEFAULT_TV_RULES: ClassificationRule[] = [
   { 
     id: 't_cn', 
     name: '华语剧集', 
     targetCid: '', 
     conditions: { 
       origin_country: 'CN,TW,HK' 
-      // Language: All, Genre: All
     } 
   },
   { 
@@ -51,8 +50,7 @@ export const DEFAULT_TV_RULES = [
     name: '欧美剧集', 
     targetCid: '', 
     conditions: { 
-      origin_country: '!CN,TW,HK,JP,KR' // Exclude CN, TW, HK, JP, KR
-      // Language: All, Genre: All
+      origin_country: '!CN,TW,HK,JP,KR'
     } 
   },
   { 
@@ -61,7 +59,6 @@ export const DEFAULT_TV_RULES = [
     targetCid: '', 
     conditions: { 
       origin_country: 'JP,KR' 
-      // Language: All, Genre: All
     } 
   },
   { 
@@ -71,7 +68,6 @@ export const DEFAULT_TV_RULES = [
     conditions: { 
       genre_ids: '16', 
       origin_country: 'CN,TW,HK' 
-      // Language: All
     } 
   },
   { 
@@ -81,7 +77,6 @@ export const DEFAULT_TV_RULES = [
     conditions: { 
       genre_ids: '16', 
       origin_country: 'JP' 
-      // Language: All
     } 
   },
   { 
@@ -90,7 +85,6 @@ export const DEFAULT_TV_RULES = [
     targetCid: '', 
     conditions: { 
       genre_ids: '99' 
-      // Region: All, Language: All
     } 
   },
   { 
@@ -99,7 +93,6 @@ export const DEFAULT_TV_RULES = [
     targetCid: '', 
     conditions: { 
       genre_ids: '10764,10767' 
-      // Region: All, Language: All
     } 
   },
   { 
@@ -108,10 +101,13 @@ export const DEFAULT_TV_RULES = [
     targetCid: '', 
     conditions: { 
       genre_ids: '10762' 
-      // Region: All, Language: All
     } 
   },
 ];
+
+// ==========================================
+// 2. 默认应用配置 (Default Config)
+// ==========================================
 
 const DEFAULT_CONFIG: AppConfig = {
   telegram: {
@@ -215,57 +211,96 @@ const DEFAULT_CONFIG: AppConfig = {
   twoFactorSecret: ''
 };
 
-// Sync Config with Backend
-export const syncConfig = async () => {
-  const remoteConfig = await api.get('/api/config');
-  if (remoteConfig && Object.keys(remoteConfig).length > 0) {
-    // Merge defaults to ensure new fields are present
-    const merged = { ...DEFAULT_CONFIG, ...remoteConfig };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-    return merged;
-  }
-  return null;
+// ==========================================
+// 3. 逻辑处理 (Logic)
+// ==========================================
+
+/**
+ * 辅助函数：将传入的配置与默认配置深度合并
+ * 确保即使本地缓存了旧版本的配置，新版本增加的字段也能从 DEFAULT_CONFIG 中补全
+ */
+const mergeWithDefaults = (parsed: any): AppConfig => {
+  return {
+    ...DEFAULT_CONFIG,
+    ...parsed,
+    cloud115: { ...DEFAULT_CONFIG.cloud115, ...(parsed.cloud115 || {}) },
+    cloud123: { ...DEFAULT_CONFIG.cloud123, ...(parsed.cloud123 || {}) },
+    openList: { ...DEFAULT_CONFIG.openList, ...(parsed.openList || {}) },
+    proxy: { ...DEFAULT_CONFIG.proxy, ...(parsed.proxy || {}) },
+    tmdb: { ...DEFAULT_CONFIG.tmdb, ...(parsed.tmdb || {}) },
+    emby: { 
+        ...DEFAULT_CONFIG.emby, 
+        ...(parsed.emby || {}),
+        notifications: { ...DEFAULT_CONFIG.emby.notifications, ...(parsed.emby?.notifications || {}) },
+        missingEpisodes: { ...DEFAULT_CONFIG.emby.missingEpisodes, ...(parsed.emby?.missingEpisodes || {}) }
+    },
+    organize: { 
+        ...DEFAULT_CONFIG.organize, 
+        ...(parsed.organize || {}),
+        ai: { ...DEFAULT_CONFIG.organize.ai, ...(parsed.organize?.ai || {}) },
+        rename: { ...DEFAULT_CONFIG.organize.rename, ...(parsed.organize?.rename || {}) },
+        movieRules: parsed.organize?.movieRules || DEFAULT_CONFIG.organize.movieRules,
+        tvRules: parsed.organize?.tvRules || DEFAULT_CONFIG.organize.tvRules,
+    },
+    strm: { 
+        ...DEFAULT_CONFIG.strm, 
+        ...(parsed.strm || {}),
+        webdav: { ...DEFAULT_CONFIG.strm.webdav, ...(parsed.strm?.webdav || {}) }
+    }
+  };
 };
 
+/**
+ * 从本地存储加载配置
+ * 用于 React State 的同步初始化
+ */
 export const loadConfig = (): AppConfig => {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
-      // Deep merge logic
-      return {
-        ...DEFAULT_CONFIG,
-        ...parsed,
-        cloud115: { ...DEFAULT_CONFIG.cloud115, ...(parsed.cloud115 || {}) },
-        cloud123: { ...DEFAULT_CONFIG.cloud123, ...(parsed.cloud123 || {}) },
-        emby: { 
-            ...DEFAULT_CONFIG.emby, 
-            ...(parsed.emby || {}),
-            notifications: { ...DEFAULT_CONFIG.emby.notifications, ...(parsed.emby?.notifications || {}) },
-            missingEpisodes: { ...DEFAULT_CONFIG.emby.missingEpisodes, ...(parsed.emby?.missingEpisodes || {}) }
-        },
-        organize: { 
-            ...DEFAULT_CONFIG.organize, 
-            ...(parsed.organize || {}),
-            ai: { ...DEFAULT_CONFIG.organize.ai, ...(parsed.organize?.ai || {}) },
-            movieRules: parsed.organize?.movieRules || DEFAULT_CONFIG.organize.movieRules,
-            tvRules: parsed.organize?.tvRules || DEFAULT_CONFIG.organize.tvRules,
-        },
-        strm: { 
-            ...DEFAULT_CONFIG.strm, 
-            ...(parsed.strm || {}),
-            webdav: { ...DEFAULT_CONFIG.strm.webdav, ...(parsed.strm?.webdav || {}) }
-        }
-      };
+      return mergeWithDefaults(parsed);
     } catch (e) {
-      console.error("Failed to parse config", e);
+      console.error("Failed to parse local config, using default", e);
     }
   }
   return DEFAULT_CONFIG;
 };
 
+/**
+ * 保存配置：
+ * 1. 更新本地缓存
+ * 2. 异步推送给后端 API
+ */
 export const saveConfig = async (config: AppConfig): Promise<void> => {
+  // Save to local
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-  // Background sync
-  await api.post('/api/config', config);
+  
+  // Save to backend using the real API service
+  try {
+    await api.saveConfig(config);
+  } catch (e) {
+    console.error("Failed to sync config with backend", e);
+    // 这里不抛出错误，因为本地保存已经成功，可以让用户感知是成功的
+    // 实际项目中可以加个 Toast 提示“云端同步失败”
+  }
+};
+
+/**
+ * 从后端拉取最新配置并更新本地缓存
+ * 通常在 App 初始化时调用
+ */
+export const syncConfig = async (): Promise<AppConfig | null> => {
+  try {
+    const remoteConfig = await api.getConfig(); // 使用 api.ts 中封装好的方法
+    
+    if (remoteConfig && Object.keys(remoteConfig).length > 0) {
+      const merged = mergeWithDefaults(remoteConfig);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      return merged;
+    }
+  } catch (e) {
+    console.warn("Could not fetch remote config, using local cache.", e);
+  }
+  return null;
 };
