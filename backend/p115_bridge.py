@@ -4,14 +4,30 @@ import uuid
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 
-# Device profiles for 115 QR login
-DEVICE_PROFILES = {
-    'web': {'device_name': 'web', 'app_id': '8'},
-    'ios': {'device_name': 'ios', 'app_id': '9'},
-    'android': {'device_name': 'android', 'app_id': '13'},
-    'tv': {'device_name': 'tv', 'app_id': '14'},
-    'qandroid': {'device_name': 'qandroid', 'app_id': '17'},
-    'mini': {'device_name': 'mini', 'app_id': '18'},
+# 添加到 p115_bridge.py（靠近其它 device profile 定义处）
+ALL_DEVICE_PROFILES_FULL = {
+    "web": 8,
+    "pcweb": 7,
+    "android": 13,
+    "android_tv": 14,
+    "ios": 9,
+    "ipad": 10,
+    "applet": 22,
+    "mini": 18,
+    "qandroid": 17,
+    "desktop": 11,
+    "windows": 19,
+    "mac": 20,
+    "linux": 21,
+    "harmony": 23,
+    "xiaomi": 24,
+    "huawei": 25,
+    "oppo": 26,
+    "vivo": 27,
+    "samsung": 28,
+    "browser": 29,
+    "client": 30,
+    "open_app": 31
 }
 
 # 22 device profiles for cloud115.loginApp (simplified mapping)
