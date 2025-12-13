@@ -80,6 +80,19 @@ fi
 echo "🔧 检查 Nginx 配置..."
 nginx -t
 
+# 2.5. 初始化数据库（防止 Gunicorn worker 竞态条件）
+echo "💾 初始化数据库..."
+cd /app
+python << 'PYEOF' 2>&1 || echo "⚠️  数据库初始化完成或有非致命警告"
+try:
+    from models.database import init_all_databases
+    init_all_databases()
+    print("✅ 数据库初始化完成")
+except Exception as e:
+    print(f"⚠️  数据库初始化注意: {e}")
+    # 不退出，因为表可能已存在
+PYEOF
+
 # 3. 启动 Gunicorn (Python 后端)
 echo "🐍 启动后端服务 (Gunicorn)..."
 cd /app

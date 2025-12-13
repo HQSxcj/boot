@@ -64,7 +64,8 @@ def init_secrets_db():
     """Initialize secrets database for encrypted sensitive data."""
     database_url = get_secrets_db_url()
     engine = _create_engine(database_url)
-    SecretsBase.metadata.create_all(engine)
+    # Use checkfirst=True to avoid race conditions when multiple workers initialize
+    SecretsBase.metadata.create_all(engine, checkfirst=True)
     return engine
 
 
@@ -72,7 +73,8 @@ def init_appdata_db():
     """Initialize appdata database for non-sensitive application data."""
     database_url = get_appdata_db_url()
     engine = _create_engine(database_url)
-    AppDataBase.metadata.create_all(engine)
+    # Use checkfirst=True to avoid race conditions when multiple workers initialize
+    AppDataBase.metadata.create_all(engine, checkfirst=True)
     return engine
 
 
