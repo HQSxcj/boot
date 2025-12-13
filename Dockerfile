@@ -12,7 +12,10 @@ RUN npm install --legacy-peer-deps
 COPY . .
 
 # 3. 构建前端
-RUN npm run build
+RUN npm run build && \
+    echo "=== Frontend build completed ===" && \
+    ls -la dist/ && \
+    cat dist/index.html | head -20
 
 # ==========================================
 # 第二阶段：构建后端 (Runtime)
