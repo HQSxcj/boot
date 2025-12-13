@@ -10,10 +10,18 @@
 - **Emby 集成** - 缺集检测、媒体库刷新
 - **WebDAV** - 挂载 STRM 目录供播放器访问
 
-## 快速开始
+## 部署
 
-### Docker 运行
+### 方式一：Docker Compose（推荐）
+```bash
+# 启动服务
+docker-compose up -d
 
+# 查看日志
+docker-compose logs -f
+```
+
+### 方式二：Docker CLI
 ```bash
 docker run -d \
   --name boot \
