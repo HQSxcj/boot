@@ -1,14 +1,18 @@
 import json
 import logging
+import requests
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from services.secret_store import SecretStore
 
 logger = logging.getLogger(__name__)
 
+# 123 云盘 API 基础配置
+CLOUD123_API_BASE = "https://open-api.123pan.com"
+
 
 class Cloud123Service:
-    """Service for interacting with 123 cloud via OAuth or cookies."""
+    """Service for interacting with 123 cloud via OAuth API."""
     
     def __init__(self, secret_store: SecretStore):
         """
@@ -18,111 +22,241 @@ class Cloud123Service:
             secret_store: SecretStore instance for retrieving tokens
         """
         self.secret_store = secret_store
-        self._client = None
-        
-        try:
-            import cloud123
-            self.cloud123 = cloud123
-        except ImportError:
-            self.cloud123 = None
-            logger.warning('cloud123 not installed, 123 operations will be mocked')
+        self._access_token = None
+        self._token_expires_at = None
     
-    def _get_authenticated_client(self):
-        """Get or create an authenticated cloud123 client instance."""
-        if not self.cloud123:
-            raise ImportError('cloud123 not installed')
+    def _get_access_token(self) -> Optional[str]:
+        """
+        Get valid access token, refreshing if necessary.
         
-        # Try to get token first (OAuth)
+        Returns:
+            Valid access token or None
+        """
+        # 检查缓存的 token 是否有效
+        if self._access_token and self._token_expires_at:
+            if datetime.now() < self._token_expires_at:
+                return self._access_token
+        
+        # 尝试从 secret store 获取保存的 token
         token_json = self.secret_store.get_secret('cloud123_token')
         if token_json:
             try:
-                token = json.loads(token_json)
-                if hasattr(self.cloud123, 'Cloud123Client'):
-                    client = self.cloud123.Cloud123Client(token=token)
-                    return client
-            except json.JSONDecodeError:
-                logger.warning('Invalid token format in secret store')
+                token_data = json.loads(token_json)
+                expires_at_str = token_data.get('expires_at')
+                if expires_at_str:
+                    expires_at = datetime.fromisoformat(expires_at_str)
+                    if datetime.now() < expires_at:
+                        self._access_token = token_data.get('access_token')
+                        self._token_expires_at = expires_at
+                        return self._access_token
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(f'Invalid token data: {e}')
         
-        # Fall back to cookies if available
-        cookies_json = self.secret_store.get_secret('cloud123_cookies')
-        if not cookies_json:
-            raise ValueError('No 123 token or cookies found in secret store')
+        # 需要刷新 token - 获取 OAuth 凭据
+        creds_json = self.secret_store.get_secret('cloud123_oauth_credentials')
+        if not creds_json:
+            logger.warning('No OAuth credentials found')
+            return None
         
         try:
-            cookies = json.loads(cookies_json)
-        except json.JSONDecodeError:
-            raise ValueError('Invalid cookies format in secret store')
+            creds = json.loads(creds_json)
+            client_id = creds.get('clientId')
+            client_secret = creds.get('clientSecret')
+            
+            if not client_id or not client_secret:
+                logger.warning('Missing clientId or clientSecret')
+                return None
+            
+            # 调用 123 云盘 API 获取 access_token
+            new_token = self._request_access_token(client_id, client_secret)
+            if new_token:
+                return new_token
+        except json.JSONDecodeError as e:
+            logger.error(f'Failed to parse OAuth credentials: {e}')
         
-        # Create client with cookies
-        if hasattr(self.cloud123, 'Cloud123Client'):
-            client = self.cloud123.Cloud123Client(cookies=cookies)
-            return client
-        else:
-            raise ImportError('cloud123.Cloud123Client not available')
+        return None
     
-    def list_directory(self, dir_id: str = '/') -> Dict[str, Any]:
+    def _request_access_token(self, client_id: str, client_secret: str) -> Optional[str]:
+        """
+        Request new access token from 123 cloud API.
+        
+        Args:
+            client_id: OAuth client ID
+            client_secret: OAuth client secret
+        
+        Returns:
+            Access token or None
+        """
+        try:
+            url = f"{CLOUD123_API_BASE}/api/v1/access_token"
+            payload = {
+                "clientID": client_id,
+                "clientSecret": client_secret
+            }
+            headers = {
+                "Content-Type": "application/json",
+                "Platform": "open_platform"
+            }
+            
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if data.get('code') == 0:
+                result = data.get('data', {})
+                access_token = result.get('accessToken')
+                expired_at = result.get('expiredAt')  # 返回的是日期字符串，如 "2026-03-14T01:33:55+08:00"
+                
+                if access_token:
+                    # 缓存 token
+                    self._access_token = access_token
+                    
+                    # 解析过期时间
+                    if expired_at and isinstance(expired_at, str):
+                        try:
+                            # 解析 ISO 格式日期字符串
+                            self._token_expires_at = datetime.fromisoformat(expired_at.replace('+08:00', '+08:00').replace('Z', '+00:00'))
+                        except ValueError:
+                            # 如果解析失败，默认 2 小时后过期
+                            self._token_expires_at = datetime.now() + timedelta(hours=2)
+                    else:
+                        self._token_expires_at = datetime.now() + timedelta(hours=2)
+                    
+                    # 保存到 secret store
+                    token_data = {
+                        'access_token': access_token,
+                        'expires_at': self._token_expires_at.isoformat()
+                    }
+                    self.secret_store.set_secret('cloud123_token', json.dumps(token_data))
+                    
+                    logger.info('Successfully obtained 123 cloud access token')
+                    return access_token
+            else:
+                logger.error(f"Failed to get access token: {data.get('message', 'Unknown error')}")
+        except requests.RequestException as e:
+            logger.error(f'Failed to request access token: {e}')
+        except Exception as e:
+            logger.error(f'Unexpected error getting access token: {e}')
+        
+        return None
+    
+    def _make_api_request(self, method: str, endpoint: str, params: Dict = None, json_data: Dict = None) -> Dict[str, Any]:
+        """
+        Make authenticated API request to 123 cloud.
+        
+        Args:
+            method: HTTP method
+            endpoint: API endpoint (without base URL)
+            params: Query parameters
+            json_data: JSON body data
+        
+        Returns:
+            API response data or error dict
+        """
+        access_token = self._get_access_token()
+        if not access_token:
+            return {
+                'success': False,
+                'error': 'No valid access token. Please configure OAuth credentials.'
+            }
+        
+        try:
+            url = f"{CLOUD123_API_BASE}{endpoint}"
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "Platform": "open_platform"
+            }
+            
+            if method.upper() == 'GET':
+                response = requests.get(url, params=params, headers=headers, timeout=30)
+            elif method.upper() == 'POST':
+                response = requests.post(url, json=json_data, headers=headers, timeout=30)
+            elif method.upper() == 'DELETE':
+                response = requests.delete(url, json=json_data, headers=headers, timeout=30)
+            else:
+                return {'success': False, 'error': f'Unsupported HTTP method: {method}'}
+            
+            response.raise_for_status()
+            data = response.json()
+            
+            if data.get('code') == 0:
+                return {
+                    'success': True,
+                    'data': data.get('data', {})
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': data.get('message', 'Unknown API error'),
+                    'code': data.get('code')
+                }
+        except requests.RequestException as e:
+            logger.error(f'API request failed: {e}')
+            return {
+                'success': False,
+                'error': f'API request failed: {str(e)}'
+            }
+        except Exception as e:
+            logger.error(f'Unexpected error: {e}')
+            return {
+                'success': False,
+                'error': f'Unexpected error: {str(e)}'
+            }
+
+    
+    def list_directory(self, dir_id: str = '0') -> Dict[str, Any]:
         """
         List directory contents from 123 cloud.
         
         Args:
-            dir_id: Directory ID (path), defaults to '/' for root
+            dir_id: Directory ID, defaults to '0' for root
         
         Returns:
             Dict with success flag and list of entries
         """
         try:
-            client = self._get_authenticated_client()
+            # 123 云盘 API 使用 parentFileId 参数
+            # dir_id 为 0 表示根目录
+            if dir_id == '/' or dir_id == '':
+                dir_id = '0'
             
-            # Get directory listing
-            if hasattr(client, 'list_files'):
-                entries = client.list_files(dir_id)
-            elif hasattr(client, 'fs') and hasattr(client.fs, 'listdir'):
-                entries = client.fs.listdir(dir_id)
-            else:
-                return {
-                    'success': True,
-                    'data': []
-                }
+            params = {
+                'parentFileId': int(dir_id),
+                'limit': 100,
+                'Page': 1,
+                'orderBy': 'file_name',
+                'orderDirection': 'asc'
+            }
             
-            # Transform entries to match frontend format
-            result = []
-            for entry in entries:
-                # Extract fields with various possible attribute names
-                entry_id = getattr(entry, 'id', None) or getattr(entry, 'file_id', None) or getattr(entry, 'path', None)
-                entry_name = getattr(entry, 'name', None) or getattr(entry, 'file_name', None)
-                is_directory = getattr(entry, 'is_dir', None) or getattr(entry, 'is_directory', None) or getattr(entry, 'type', None) == 'dir'
-                
-                # Get timestamp
-                timestamp = getattr(entry, 'timestamp', None) or getattr(entry, 'modified_time', None) or getattr(entry, 'mtime', None)
-                if timestamp:
-                    try:
-                        if isinstance(timestamp, (int, float)):
-                            date_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d')
-                        else:
-                            date_str = str(timestamp)[:10]
-                    except:
-                        date_str = datetime.now().strftime('%Y-%m-%d')
-                else:
-                    date_str = datetime.now().strftime('%Y-%m-%d')
+            result = self._make_api_request('GET', '/api/v2/file/list', params=params)
+            
+            if not result.get('success'):
+                return result
+            
+            # 转换数据格式
+            api_data = result.get('data', {})
+            file_list = api_data.get('fileList', []) if isinstance(api_data, dict) else api_data
+            
+            entries = []
+            for item in file_list:
+                entry_id = item.get('fileId')
+                entry_name = item.get('filename') or item.get('fileName')
+                is_directory = item.get('type') == 1  # 1 = 文件夹, 0 = 文件
+                update_time = item.get('updateTime', '')
                 
                 if entry_id and entry_name:
-                    result.append({
+                    entries.append({
                         'id': str(entry_id),
                         'name': entry_name,
-                        'children': bool(is_directory),
-                        'date': date_str
+                        'children': is_directory,
+                        'date': update_time[:10] if update_time else datetime.now().strftime('%Y-%m-%d')
                     })
             
             return {
                 'success': True,
-                'data': result
-            }
-        
-        except (ImportError, ValueError) as e:
-            logger.warning(f'Failed to list directory: {str(e)}')
-            return {
-                'success': False,
-                'error': str(e)
+                'data': entries
             }
         except Exception as e:
             logger.error(f'Failed to list directory {dir_id}: {str(e)}')
@@ -143,32 +277,23 @@ class Cloud123Service:
             Dict with success flag
         """
         try:
-            client = self._get_authenticated_client()
+            # 使用单个文件重命名 API
+            payload = {
+                'fileId': int(file_id),
+                'fileName': new_name
+            }
             
-            if hasattr(client, 'rename'):
-                client.rename(file_id, new_name)
-            elif hasattr(client, 'fs') and hasattr(client.fs, 'rename'):
-                client.fs.rename(file_id, new_name)
-            else:
+            result = self._make_api_request('POST', '/api/v1/file/rename', json_data=payload)
+            
+            if result.get('success'):
                 return {
-                    'success': False,
-                    'error': 'Rename operation not supported'
+                    'success': True,
+                    'data': {
+                        'fileId': file_id,
+                        'newName': new_name
+                    }
                 }
-            
-            return {
-                'success': True,
-                'data': {
-                    'fileId': file_id,
-                    'newName': new_name
-                }
-            }
-        
-        except (ImportError, ValueError) as e:
-            logger.warning(f'Failed to rename file: {str(e)}')
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return result
         except Exception as e:
             logger.error(f'Failed to rename file {file_id}: {str(e)}')
             return {
@@ -188,32 +313,23 @@ class Cloud123Service:
             Dict with success flag
         """
         try:
-            client = self._get_authenticated_client()
+            # 使用移动文件 API
+            payload = {
+                'fileIds': [int(file_id)],
+                'toParentFileId': int(target_dir_id)
+            }
             
-            if hasattr(client, 'move'):
-                client.move(file_id, target_dir_id)
-            elif hasattr(client, 'fs') and hasattr(client.fs, 'move'):
-                client.fs.move(file_id, target_dir_id)
-            else:
+            result = self._make_api_request('POST', '/api/v1/file/move', json_data=payload)
+            
+            if result.get('success'):
                 return {
-                    'success': False,
-                    'error': 'Move operation not supported'
+                    'success': True,
+                    'data': {
+                        'fileId': file_id,
+                        'targetDirId': target_dir_id
+                    }
                 }
-            
-            return {
-                'success': True,
-                'data': {
-                    'fileId': file_id,
-                    'targetDirId': target_dir_id
-                }
-            }
-        
-        except (ImportError, ValueError) as e:
-            logger.warning(f'Failed to move file: {str(e)}')
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return result
         except Exception as e:
             logger.error(f'Failed to move file {file_id}: {str(e)}')
             return {
@@ -223,7 +339,7 @@ class Cloud123Service:
     
     def delete_file(self, file_id: str) -> Dict[str, Any]:
         """
-        Delete a file or folder from 123 cloud.
+        Delete a file or folder from 123 cloud (move to trash).
         
         Args:
             file_id: File or folder ID
@@ -232,31 +348,21 @@ class Cloud123Service:
             Dict with success flag
         """
         try:
-            client = self._get_authenticated_client()
+            # 删除文件至回收站 API
+            payload = {
+                'fileIds': [int(file_id)]
+            }
             
-            if hasattr(client, 'delete'):
-                client.delete(file_id)
-            elif hasattr(client, 'fs') and hasattr(client.fs, 'delete'):
-                client.fs.delete(file_id)
-            else:
+            result = self._make_api_request('POST', '/api/v1/file/trash', json_data=payload)
+            
+            if result.get('success'):
                 return {
-                    'success': False,
-                    'error': 'Delete operation not supported'
+                    'success': True,
+                    'data': {
+                        'fileId': file_id
+                    }
                 }
-            
-            return {
-                'success': True,
-                'data': {
-                    'fileId': file_id
-                }
-            }
-        
-        except (ImportError, ValueError) as e:
-            logger.warning(f'Failed to delete file: {str(e)}')
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return result
         except Exception as e:
             logger.error(f'Failed to delete file {file_id}: {str(e)}')
             return {
@@ -275,32 +381,24 @@ class Cloud123Service:
             Dict with success flag and download URL
         """
         try:
-            client = self._get_authenticated_client()
+            # 使用下载 API
+            params = {
+                'fileId': int(file_id)
+            }
             
-            if hasattr(client, 'get_download_url'):
-                url = client.get_download_url(file_id)
-            elif hasattr(client, 'fs') and hasattr(client.fs, 'get_url'):
-                url = client.fs.get_url(file_id)
-            else:
+            result = self._make_api_request('GET', '/api/v1/file/download_info', params=params)
+            
+            if result.get('success'):
+                data = result.get('data', {})
+                url = data.get('url') or data.get('downloadUrl')
                 return {
-                    'success': False,
-                    'error': 'Download link operation not supported'
+                    'success': True,
+                    'data': {
+                        'fileId': file_id,
+                        'url': url
+                    }
                 }
-            
-            return {
-                'success': True,
-                'data': {
-                    'fileId': file_id,
-                    'url': url
-                }
-            }
-        
-        except (ImportError, ValueError) as e:
-            logger.warning(f'Failed to get download link: {str(e)}')
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return result
         except Exception as e:
             logger.error(f'Failed to get download link for {file_id}: {str(e)}')
             return {
@@ -320,42 +418,26 @@ class Cloud123Service:
             Dict with success flag and task ID from 123
         """
         try:
-            client = self._get_authenticated_client()
+            # 123 云盘离线下载 API
+            payload = {
+                'url': source_url,
+                'parentFileId': int(save_dir_id) if save_dir_id != '0' else 0
+            }
             
-            # Try various possible method names
-            if hasattr(client, 'add_offline_task'):
-                result = client.add_offline_task(source_url, save_dir_id)
-            elif hasattr(client, 'offline') and hasattr(client.offline, 'add_url'):
-                result = client.offline.add_url(source_url, save_dir_id)
-            elif hasattr(client, 'offline_add'):
-                result = client.offline_add(source_url, save_dir_id)
-            else:
+            result = self._make_api_request('POST', '/api/v1/offline/download', json_data=payload)
+            
+            if result.get('success'):
+                data = result.get('data', {})
+                task_id = data.get('taskId') or data.get('task_id') or data.get('id')
                 return {
-                    'success': False,
-                    'error': 'Offline task creation not supported'
+                    'success': True,
+                    'data': {
+                        'p123TaskId': str(task_id) if task_id else '',
+                        'sourceUrl': source_url,
+                        'saveDirId': save_dir_id
+                    }
                 }
-            
-            # Extract task ID from result
-            if isinstance(result, dict):
-                task_id = result.get('task_id') or result.get('info_hash') or result.get('id')
-            else:
-                task_id = str(result)
-            
-            return {
-                'success': True,
-                'data': {
-                    'p123TaskId': task_id,
-                    'sourceUrl': source_url,
-                    'saveDirId': save_dir_id
-                }
-            }
-        
-        except (ImportError, ValueError) as e:
-            logger.warning(f'Failed to create offline task: {str(e)}')
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return result
         except Exception as e:
             logger.error(f'Failed to create offline task: {str(e)}')
             return {
