@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libc6-dev \
     libffi-dev \
     libssl-dev \
+    dos2unix \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /etc/nginx/sites-enabled/default
 
@@ -59,7 +60,7 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # 7. 启动脚本
 COPY start.sh /start.sh
-RUN chmod +x /start.sh
+RUN dos2unix /start.sh && chmod +x /start.sh
 
 # 8. 创建数据目录
 RUN mkdir -p /data/strm /data/logs
