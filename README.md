@@ -12,15 +12,81 @@
 
 ## 快速开始
 
+### Docker 运行
+
 ```bash
 docker run -d \
   --name boot \
   -p 18080:18080 \
   -v /your/data:/data \
   -v /your/strm:/data/strm \
-  -e SECRETS_ENCRYPTION_KEY=your-32-char-key \
   boot:latest
 ```
+
+**重要事项**：
+
+1. **替换路径**: 将 `/your/data` 和 `/your/strm` 替换为本地实际路径
+   ```bash
+   # 示例 (Linux/Mac):
+   mkdir -p ~/boot-data ~/boot-strm
+   docker run -d --name boot -p 18080:18080 \
+     -v ~/boot-data:/data \
+     -v ~/boot-strm:/data/strm \
+     boot:latest
+   
+   # 示例 (Windows):
+   docker run -d --name boot -p 18080:18080 ^
+     -v C:\boot-data:/data ^
+     -v C:\boot-strm:/data/strm ^
+     boot:latest
+   ```
+
+2. **首次启动**: 容器会自动初始化 `/data/config.yml` 配置文件
+3. **访问应用**: 打开浏览器访问 `http://localhost:18080`
+4. **配置**: 在 Web UI 中点击右下角**用户中心** → **设置**进行配置
+
+### Docker Compose 运行
+
+```bash
+git clone https://github.com/HQSxcj/boot.git
+cd boot
+docker-compose up -d
+```
+
+然后访问 `http://localhost:18080`
+
+### 故障排除
+
+**问题：容器启动后无法访问**
+
+1. 检查容器状态：
+   ```bash
+   docker ps | grep boot
+   ```
+
+2. 查看容器日志：
+   ```bash
+   docker logs boot -f
+   ```
+
+3. 常见原因：
+   - **数据卷权限问题**: `/data` 目录无写入权限
+     ```bash
+     # 解决: 调整宿主机上 data 目录的权限
+     chmod 755 /your/data
+     ```
+   
+   - **端口占用**: 18080 端口已被其他服务占用
+     ```bash
+     # 解决: 使用其他端口
+     docker run -d --name boot -p 8888:18080 -v /your/data:/data boot:latest
+     ```
+   
+   - **磁盘空间不足**: 无法创建数据库或日志文件
+     ```bash
+     # 检查磁盘
+     df -h /your/data
+     ```
 
 ## 端口
 
