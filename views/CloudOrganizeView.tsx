@@ -36,7 +36,7 @@ const RENAME_TAGS = [
   { label: '原名', value: '{original_title}' }, { label: '来源', value: '{source}' }, { label: 'TMDB ID', value: '[TMDB-{id}]' },
 ];
 
-// [新增] 默认配置
+// 默认配置
 const DEFAULT_CONFIG: Partial<AppConfig> = {
     cloud115: { loginMethod: 'cookie', loginApp: 'web', cookies: '', userAgent: '', downloadPath: '', downloadDirName: '未连接', autoDeleteMsg: false, qps: 1.0 },
     cloud123: { enabled: false, clientId: '', clientSecret: '', downloadPath: '', downloadDirName: '未连接', qps: 1.0 },
@@ -241,7 +241,7 @@ export const CloudOrganizeView: React.FC = () => {
      return tempRule?.conditions[type]?.startsWith('!') || false;
   };
 
-  // 真实 QR 逻辑
+  // 真实 QR 逻辑 - 已修复 open_app 参数
   const stopQrCheck = () => {
     if (qrTimerRef.current) {
       clearInterval(qrTimerRef.current);
@@ -251,39 +251,73 @@ export const CloudOrganizeView: React.FC = () => {
 
   const generateRealQr = async () => {
     if (!config) return;
+
+    // 1. 补丁：open_app 必须填写 AppID
+    if (
+      config.cloud115.loginMethod === 'open_app' &&
+      !config.cloud115.appId
+    ) {
+      setToast('请先填写第三方 AppID');
+      return;
+    }
+
     stopQrCheck();
     setQrState('loading');
     setQrImage('');
+    setQrSessionId('');
+
     try {
-      // [修改点] 这里的调用增加了第二个参数，确保后端知道是哪种登录方式
+      // 2. 补丁：区分 qrcode / open_app 调用参数
+      const targetApp = config.cloud115.loginMethod === 'open_app' ? 'open_app' : config.cloud115.loginApp;
+      const targetAppId = config.cloud115.loginMethod === 'open_app' ? config.cloud115.appId : undefined;
+
       const data = await api.get115QrCode(
-          config.cloud115.loginApp, 
-          config.cloud115.loginMethod as 'qrcode' | 'open_app'
+        targetApp,
+        config.cloud115.loginMethod as 'qrcode' | 'open_app',
+        targetAppId
       );
-      
+
       setQrImage(data.qrcode);
       setQrSessionId(data.sessionId);
       setQrState('waiting');
+
       qrTimerRef.current = setInterval(async () => {
         try {
-          const statusRes = await api.check115QrStatus(data.sessionId, 0, '');
-          if (statusRes.data.status === 'scanned') {
-             setQrState('scanned');
-          } else if (statusRes.data.status === 'success') {
-             stopQrCheck();
-             setQrState('success');
-             fetchConfig();
-             setToast('登录成功，Cookie 已自动保存');
-          } else if (statusRes.data.status === 'error' || statusRes.data.status === 'expired') {
-             stopQrCheck();
-             setQrState(statusRes.data.status === 'expired' ? 'expired' : 'error');
+          const statusRes = await api.check115QrStatus(
+            data.sessionId,
+            0,
+            ''
+          );
+          const status = statusRes.data.status;
+
+          // 使用 switch 处理状态
+          switch(status) {
+            case 'scanned':
+                setQrState('scanned');
+                break;
+            case 'success':
+                stopQrCheck();
+                setQrState('success');
+                fetchConfig();
+                setToast('登录成功，Cookie 已自动保存');
+                break;
+            case 'expired':
+            case 'error':
+                stopQrCheck();
+                setQrState(status);
+                break;
+            default:
+                break;
           }
-        } catch (err) { console.error("QR Poll failed", err); }
+        } catch (err) {
+          console.error('QR Poll failed', err);
+        }
       }, 2000);
     } catch (e) {
-       console.error(e);
-       setQrState('error');
-       setToast("无法获取二维码 (后端未连接)");
+      console.error(e);
+      setQrState('error');
+      setToast('无法获取二维码 (后端未连接)');
+      stopQrCheck();
     }
   };
 
