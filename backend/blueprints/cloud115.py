@@ -31,18 +31,28 @@ def start_qr_login():
         data = request.get_json() or {}
         
         login_app = data.get('loginApp', 'web')
-        login_method = data.get('loginMethod', 'cookie')
+        login_method = data.get('loginMethod', 'qrcode')
+        app_id = data.get('appId')  # 第三方 App ID (仅 open_app 模式需要)
         
-        if login_method not in ['cookie', 'open_app']:
+        # 验证登录方式
+        if login_method not in ['qrcode', 'cookie', 'open_app']:
             return jsonify({
                 'success': False,
-                'error': 'Invalid login method'
+                'error': 'Invalid login method. Use qrcode, cookie, or open_app'
+            }), 400
+        
+        # open_app 模式必须提供 appId
+        if login_method == 'open_app' and not app_id:
+            return jsonify({
+                'success': False,
+                'error': 'appId is required for open_app login method'
             }), 400
         
         # Start QR login
         result = _p115_service.start_qr_login(
             login_app=login_app,
-            login_method=login_method
+            login_method=login_method,
+            app_id=app_id  # 传递第三方 App ID
         )
         
         if 'error' in result and result.get('success') == False:

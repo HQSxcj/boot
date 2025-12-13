@@ -215,3 +215,290 @@ def send_test_message():
             'success': False,
             'error': f'Failed to send test message: {str(e)}'
         }), 500
+
+
+# ==================== Webhook 相关端点 ====================
+
+# 全局工作流服务实例
+_workflow_service = None
+
+
+def set_workflow_service(workflow_service):
+    """设置工作流服务实例"""
+    global _workflow_service
+    _workflow_service = workflow_service
+
+
+@bot_bp.route('/webhook', methods=['POST'])
+def handle_webhook():
+    """
+    处理 Telegram Webhook 回调
+    接收用户发送的消息并处理
+    """
+    try:
+        update = request.get_json()
+        
+        if not update:
+            return jsonify({'ok': True}), 200
+        
+        # 处理普通消息
+        if 'message' in update:
+            message = update['message']
+            chat_id = str(message.get('chat', {}).get('id', ''))
+            user_id = str(message.get('from', {}).get('id', ''))
+            text = message.get('text', '')
+            
+            if text and chat_id:
+                _handle_user_message(chat_id, user_id, text)
+        
+        # 处理按钮回调
+        elif 'callback_query' in update:
+            callback = update['callback_query']
+            callback_id = callback.get('id')
+            chat_id = str(callback.get('message', {}).get('chat', {}).get('id', ''))
+            message_id = callback.get('message', {}).get('message_id')
+            user_id = str(callback.get('from', {}).get('id', ''))
+            data = callback.get('data', '')
+            
+            _handle_callback_query(callback_id, chat_id, message_id, user_id, data)
+        
+        return jsonify({'ok': True}), 200
+        
+    except Exception as e:
+        import logging
+        logging.error(f"Webhook error: {e}")
+        return jsonify({'ok': True}), 200  # 返回 200 避免 Telegram 重试
+
+
+def _handle_user_message(chat_id: str, user_id: str, text: str):
+    """处理用户消息"""
+    global _workflow_service, _bot_service
+    
+    if not _workflow_service or not _bot_service:
+        return
+    
+    # 忽略命令消息（已有其他处理器）
+    if text.startswith('/'):
+        return
+    
+    # 处理链接
+    result = _workflow_service.process_message(chat_id, user_id, text)
+    
+    if not result.get('success'):
+        # 不是有效链接，忽略
+        return
+    
+    if result.get('action') == 'choose':
+        # 需要用户选择网盘
+        _bot_service.send_cloud_choice(
+            chat_id=chat_id,
+            task_id=result['task_id'],
+            link_info=result['link_info'],
+            options=result['options']
+        )
+    else:
+        # 直接执行成功
+        _bot_service.send_message(
+            chat_id=chat_id,
+            text=f"✅ {result.get('message', '操作成功')}"
+        )
+
+
+def _handle_callback_query(callback_id: str, chat_id: str, message_id: int, user_id: str, data: str):
+    """处理按钮回调"""
+    global _workflow_service, _bot_service
+    
+    if not _workflow_service or not _bot_service:
+        return
+    
+    # 解析回调数据
+    # 格式: cloud_choice:task_id:target
+    if data.startswith('cloud_choice:'):
+        parts = data.split(':')
+        if len(parts) >= 3:
+            task_id = parts[1]
+            target_cloud = parts[2]
+            
+            # 响应按钮点击
+            _bot_service.answer_callback_query(
+                callback_query_id=callback_id,
+                text=f"正在处理，目标: {target_cloud} 网盘"
+            )
+            
+            # 更新消息
+            _bot_service.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=f"⏳ 正在处理，目标网盘: {target_cloud}..."
+            )
+            
+            # 执行工作流
+            result = _workflow_service.execute_with_target(task_id, target_cloud)
+            
+            if result.get('success'):
+                _bot_service.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=f"✅ {result.get('message', '任务已开始')}\n\n完成后将自动通知您。"
+                )
+            else:
+                _bot_service.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=f"❌ 失败: {result.get('error', '未知错误')}"
+                )
+
+
+@bot_bp.route('/webhook/set', methods=['POST'])
+@require_auth
+def set_webhook():
+    """设置 Telegram Webhook URL"""
+    try:
+        data = request.get_json() or {}
+        webhook_url = data.get('url', '').strip()
+        
+        if not webhook_url:
+            return jsonify({
+                'success': False,
+                'error': 'Webhook URL is required'
+            }), 400
+        
+        bot_token = _bot_service.get_bot_token()
+        if not bot_token:
+            return jsonify({
+                'success': False,
+                'error': 'Bot token not configured'
+            }), 400
+        
+        import requests
+        response = requests.post(
+            f"https://api.telegram.org/bot{bot_token}/setWebhook",
+            json={'url': webhook_url},
+            timeout=10
+        )
+        
+        result = response.json()
+        
+        if result.get('ok'):
+            return jsonify({
+                'success': True,
+                'data': {'webhook_url': webhook_url}
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('description', 'Failed to set webhook')
+            }), 400
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bot_bp.route('/webhook/info', methods=['GET'])
+@require_auth
+def get_webhook_info():
+    """获取当前 Webhook 信息"""
+    try:
+        bot_token = _bot_service.get_bot_token()
+        if not bot_token:
+            return jsonify({
+                'success': False,
+                'error': 'Bot token not configured'
+            }), 400
+        
+        import requests
+        response = requests.get(
+            f"https://api.telegram.org/bot{bot_token}/getWebhookInfo",
+            timeout=10
+        )
+        
+        result = response.json()
+        
+        if result.get('ok'):
+            return jsonify({
+                'success': True,
+                'data': result.get('result', {})
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('description', 'Failed to get webhook info')
+            }), 400
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bot_bp.route('/process-link', methods=['POST'])
+@require_auth
+def process_link_api():
+    """
+    手动处理链接（用于测试或 API 调用）
+    """
+    try:
+        if not _workflow_service:
+            return jsonify({
+                'success': False,
+                'error': 'Workflow service not initialized'
+            }), 500
+        
+        data = request.get_json() or {}
+        text = data.get('text', '').strip()
+        chat_id = data.get('chat_id', 'api')
+        user_id = data.get('user_id', 'api')
+        
+        if not text:
+            return jsonify({
+                'success': False,
+                'error': 'Text is required'
+            }), 400
+        
+        result = _workflow_service.process_message(chat_id, user_id, text)
+        
+        return jsonify(result), 200 if result.get('success') else 400
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bot_bp.route('/execute-task', methods=['POST'])
+@require_auth
+def execute_task_api():
+    """
+    执行工作流任务（选择网盘后）
+    """
+    try:
+        if not _workflow_service:
+            return jsonify({
+                'success': False,
+                'error': 'Workflow service not initialized'
+            }), 500
+        
+        data = request.get_json() or {}
+        task_id = data.get('task_id', '').strip()
+        target_cloud = data.get('target_cloud', '').strip()
+        
+        if not task_id or not target_cloud:
+            return jsonify({
+                'success': False,
+                'error': 'task_id and target_cloud are required'
+            }), 400
+        
+        result = _workflow_service.execute_with_target(task_id, target_cloud)
+        
+        return jsonify(result), 200 if result.get('success') else 400
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

@@ -17,7 +17,7 @@ type CloudDirectoryEntry = {
 
 const apiClient = axios.create({
   // 必须是 /api，配合 vite.config.ts 的 proxy 转发到 8000 端口
-  baseURL: '/api', 
+  baseURL: '/api',
   timeout: 15000,
 });
 
@@ -76,14 +76,26 @@ export const api = {
    * @param appType 模拟的终端类型 (如 android, ios, tv 等)
    * @param loginMethod 登录方式 ('qrcode' 或 'open_app')
    */
-  get115QrCode: async (appType: string, loginMethod: string) => {
-    // [修正] 直接使用传入参数，而不是读取可能过期的本地缓存
+  /**
+   * 获取 115 登录二维码
+   * @param appType 模拟的终端类型 (如 android, ios, tv 等)
+   * @param loginMethod 登录方式 ('qrcode' 或 'open_app')
+   * @param appId 可选，第三方 App ID (仅 open_app 模式需要)
+   */
+  get115QrCode: async (appType: string, loginMethod: string, appId?: string) => {
+    const payload: Record<string, any> = {
+      loginApp: appType,
+      loginMethod: loginMethod,
+    };
+
+    // 第三方 App ID 模式需要传递 appId
+    if (loginMethod === 'open_app' && appId) {
+      payload.appId = appId;
+    }
+
     const res = await apiClient.post<
       ApiResponse<{ sessionId: string; qrcode: string; loginMethod: string; loginApp: string }>
-    >('/115/login/qrcode', {
-      loginApp: appType,
-      loginMethod: loginMethod, 
-    });
+    >('/115/login/qrcode', payload);
 
     return res.data.data;
   },
@@ -290,7 +302,7 @@ export const api = {
     const res = await apiClient.get<ApiResponse<any[]>>('/logs', { params });
     return res.data.data;
   },
-  
+
   // --- 辅助接口 ---
   get115LoginApps: async () => {
     const res = await apiClient.get<ApiResponse<{ key: string; appId: number }[]>>('/115/login/apps');

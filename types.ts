@@ -67,6 +67,7 @@ export interface ProxyConfig {
   port: string;
   username?: string;
   password?: string;
+  noProxyHosts?: string;  // 不走代理的地址，逗号分隔
 }
 
 export interface TmdbConfig {
@@ -144,7 +145,7 @@ export interface ClassificationRule {
 
 export interface AiConfig {
   enabled: boolean;
-  provider: 'openai' | 'gemini' | 'custom';
+  provider: 'openai' | 'gemini' | 'deepseek' | 'zhipu' | 'custom';
   baseUrl: string;
   apiKey: string;
   model: string;

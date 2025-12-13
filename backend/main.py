@@ -18,7 +18,8 @@ from blueprints.bot import bot_bp, init_bot_blueprint
 from blueprints.emby import emby_bp, init_emby_blueprint
 from blueprints.strm import strm_bp, init_strm_blueprint
 from blueprints.logs import logs_bp, init_logs_blueprint
-from models.database import init_db, get_session_factory
+from blueprints.keywords import keywords_bp, set_keyword_store
+from models.database import init_all_databases, get_session_factory
 from models.offline_task import OfflineTask
 from services.secret_store import SecretStore
 from services.cloud115_service import Cloud115Service
@@ -26,6 +27,7 @@ from services.cloud123_service import Cloud123Service
 from services.telegram_bot import TelegramBotService
 from services.offline_tasks import OfflineTaskService
 from services.task_poller import create_task_poller
+from utils.logger import get_app_logger, get_api_logger
 
 
 def create_app(config=None):
@@ -110,28 +112,47 @@ def create_app(config=None):
     data_path = os.environ.get('DATA_PATH', '/data/appdata.json')
     store = DataStore(data_path)
     
-    # Initialize database and secret store
-    engine = init_db()
-    session_factory = get_session_factory(engine)
-    secret_store = SecretStore(session_factory)
+    # Initialize logger
+    logger = get_app_logger()
+    logger.info('Starting application initialization...')
+    
+    # Initialize dual databases (secrets.db + appdata.db)
+    secrets_engine, appdata_engine = init_all_databases()
+    secrets_session_factory = get_session_factory(secrets_engine)
+    appdata_session_factory = get_session_factory(appdata_engine)
+    secret_store = SecretStore(secrets_session_factory)
+    
+    logger.info('Database initialized: secrets.db (encrypted), appdata.db (general data)')
     
     # Store in app context
     app.secret_store = secret_store
-    app.db_engine = engine
-    app.session_factory = session_factory
+    app.secrets_engine = secrets_engine
+    app.appdata_engine = appdata_engine
+    app.secrets_session_factory = secrets_session_factory
+    app.appdata_session_factory = appdata_session_factory
+    # Legacy aliases for backward compatibility
+    app.db_engine = secrets_engine
+    app.session_factory = secrets_session_factory
     
     # Initialize services
     cloud115_service = Cloud115Service(secret_store)
     cloud123_service = Cloud123Service(secret_store)
     
+    # Initialize sensitive data service for encrypted storage
+    from services.sensitive_data_service import SensitiveDataService
+    sensitive_data_service = SensitiveDataService(secret_store)
+    app.sensitive_data_service = sensitive_data_service
+    
     # Initialize offline task service and poller
-    offline_task_service = OfflineTaskService(session_factory, store, None, cloud115_service)
+    offline_task_service = OfflineTaskService(secrets_session_factory, store, None, cloud115_service)
     task_poller = create_task_poller(offline_task_service)
     
     app.cloud115_service = cloud115_service
     app.cloud123_service = cloud123_service
     app.offline_task_service = offline_task_service
     app.task_poller = task_poller
+    
+    logger.info('Services initialized successfully')
     
     # Start task poller
     if not app.config.get('TESTING'):
@@ -148,6 +169,38 @@ def create_app(config=None):
     init_strm_blueprint(store)
     init_logs_blueprint()
     
+    # Initialize keyword store for AI recognition caching
+    from services.keyword_store import KeywordStore
+    keyword_store = KeywordStore(session_factory)
+    app.keyword_store = keyword_store
+    set_keyword_store(keyword_store)
+    
+    # Initialize Workflow Service for Bot automation
+    from services.link_parser import LinkParser
+    from services.workflow_service import WorkflowService
+    from services.emby_service import EmbyService
+    from services.strm_service import StrmService
+    from blueprints.bot import set_workflow_service
+    
+    link_parser = LinkParser()
+    telegram_service = TelegramBotService(secret_store)
+    emby_service = EmbyService(store)
+    strm_service = StrmService(store)
+    
+    workflow_service = WorkflowService(
+        link_parser=link_parser,
+        cloud115_service=cloud115_service,
+        cloud123_service=cloud123_service,
+        offline_service=offline_task_service,
+        strm_service=strm_service,
+        emby_service=emby_service,
+        telegram_service=telegram_service,
+        config_store=store
+    )
+    
+    app.workflow_service = workflow_service
+    set_workflow_service(workflow_service)
+    
     app.register_blueprint(auth_bp)
     app.register_blueprint(config_bp)
     app.register_blueprint(health_bp)
@@ -158,6 +211,7 @@ def create_app(config=None):
     app.register_blueprint(emby_bp)
     app.register_blueprint(strm_bp)
     app.register_blueprint(logs_bp)
+    app.register_blueprint(keywords_bp)
     
     # Root endpoint
     @app.route('/')

@@ -58,6 +58,11 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
-EXPOSE 80
+# 8. 创建数据目录
+RUN mkdir -p /data/strm /data/logs
+
+VOLUME ["/data", "/data/strm"]
+
+EXPOSE 18080
 
 CMD ["/start.sh"]

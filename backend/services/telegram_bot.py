@@ -248,3 +248,234 @@ class TelegramBotService:
         except Exception as e:
             logger.warning(f'Failed to load saved commands, using defaults: {str(e)}')
             return self.get_default_commands()
+    
+    def send_message(self, chat_id: str, text: str, parse_mode: str = 'Markdown') -> Dict[str, Any]:
+        """
+        发送文本消息
+        
+        Args:
+            chat_id: 目标聊天ID
+            text: 消息文本
+            parse_mode: 解析模式
+        """
+        try:
+            bot_token = self.get_bot_token()
+            if not bot_token:
+                return {'success': False, 'error': 'Bot token not configured'}
+            
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {
+                'chat_id': chat_id,
+                'text': text,
+                'parse_mode': parse_mode
+            }
+            
+            response = requests.post(url, json=payload, timeout=10)
+            data = response.json()
+            
+            if data.get('ok'):
+                return {'success': True, 'message_id': data['result']['message_id']}
+            else:
+                return {'success': False, 'error': data.get('description', 'Send failed')}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def send_choice_buttons(
+        self, 
+        chat_id: str, 
+        text: str, 
+        options: List[Dict[str, str]],
+        callback_prefix: str = 'choice'
+    ) -> Dict[str, Any]:
+        """
+        发送带选择按钮的消息
+        
+        Args:
+            chat_id: 目标聊天ID
+            text: 消息文本
+            options: 选项列表 [{'text': '显示文本', 'data': '回调数据'}, ...]
+            callback_prefix: 回调前缀
+        """
+        try:
+            bot_token = self.get_bot_token()
+            if not bot_token:
+                return {'success': False, 'error': 'Bot token not configured'}
+            
+            # 构建 inline keyboard
+            keyboard = []
+            row = []
+            for opt in options:
+                row.append({
+                    'text': opt['text'],
+                    'callback_data': f"{callback_prefix}:{opt['data']}"
+                })
+            keyboard.append(row)
+            
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {
+                'chat_id': chat_id,
+                'text': text,
+                'parse_mode': 'Markdown',
+                'reply_markup': {
+                    'inline_keyboard': keyboard
+                }
+            }
+            
+            response = requests.post(url, json=payload, timeout=10)
+            data = response.json()
+            
+            if data.get('ok'):
+                return {
+                    'success': True, 
+                    'message_id': data['result']['message_id']
+                }
+            else:
+                return {'success': False, 'error': data.get('description', 'Send failed')}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def send_cloud_choice(
+        self, 
+        chat_id: str, 
+        task_id: str,
+        link_info: str,
+        options: List[str]
+    ) -> Dict[str, Any]:
+        """
+        发送网盘选择按钮
+        
+        Args:
+            chat_id: 聊天ID
+            task_id: 工作流任务ID
+            link_info: 链接描述
+            options: 可选网盘列表 ['115', '123']
+        """
+        text = f"🔗 {link_info}\n\n请选择目标网盘："
+        
+        button_options = []
+        for opt in options:
+            if opt == '115':
+                button_options.append({'text': '📦 115 网盘', 'data': f'{task_id}:115'})
+            elif opt == '123':
+                button_options.append({'text': '☁️ 123 云盘', 'data': f'{task_id}:123'})
+        
+        return self.send_choice_buttons(
+            chat_id=chat_id,
+            text=text,
+            options=button_options,
+            callback_prefix='cloud_choice'
+        )
+    
+    def send_photo_with_caption(
+        self, 
+        chat_id: str, 
+        photo_url: str, 
+        caption: str,
+        parse_mode: str = 'Markdown'
+    ) -> Dict[str, Any]:
+        """
+        发送带说明文字的图片（用于发送海报通知）
+        
+        Args:
+            chat_id: 目标聊天ID
+            photo_url: 图片URL
+            caption: 说明文字
+            parse_mode: 解析模式
+        """
+        try:
+            bot_token = self.get_bot_token()
+            if not bot_token:
+                return {'success': False, 'error': 'Bot token not configured'}
+            
+            url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
+            payload = {
+                'chat_id': chat_id,
+                'photo': photo_url,
+                'caption': caption[:1024],  # Telegram caption 限制 1024 字符
+                'parse_mode': parse_mode
+            }
+            
+            response = requests.post(url, json=payload, timeout=30)
+            data = response.json()
+            
+            if data.get('ok'):
+                return {
+                    'success': True, 
+                    'message_id': data['result']['message_id']
+                }
+            else:
+                # 图片发送失败时回退到纯文本
+                logger.warning(f"Photo send failed: {data.get('description')}, falling back to text")
+                return self.send_message(chat_id, f"🎬 {caption}")
+        except Exception as e:
+            logger.error(f"Send photo error: {e}")
+            return self.send_message(chat_id, f"🎬 {caption}")
+    
+    def answer_callback_query(
+        self, 
+        callback_query_id: str, 
+        text: str = None,
+        show_alert: bool = False
+    ) -> Dict[str, Any]:
+        """
+        响应回调查询（用户点击按钮后的反馈）
+        
+        Args:
+            callback_query_id: 回调查询ID
+            text: 提示文本
+            show_alert: 是否显示弹窗
+        """
+        try:
+            bot_token = self.get_bot_token()
+            if not bot_token:
+                return {'success': False, 'error': 'Bot token not configured'}
+            
+            url = f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery"
+            payload = {
+                'callback_query_id': callback_query_id,
+                'show_alert': show_alert
+            }
+            if text:
+                payload['text'] = text
+            
+            response = requests.post(url, json=payload, timeout=10)
+            data = response.json()
+            
+            return {'success': data.get('ok', False)}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def edit_message_text(
+        self, 
+        chat_id: str, 
+        message_id: int, 
+        text: str,
+        parse_mode: str = 'Markdown'
+    ) -> Dict[str, Any]:
+        """
+        编辑已发送的消息
+        
+        Args:
+            chat_id: 聊天ID
+            message_id: 消息ID
+            text: 新文本
+        """
+        try:
+            bot_token = self.get_bot_token()
+            if not bot_token:
+                return {'success': False, 'error': 'Bot token not configured'}
+            
+            url = f"https://api.telegram.org/bot{bot_token}/editMessageText"
+            payload = {
+                'chat_id': chat_id,
+                'message_id': message_id,
+                'text': text,
+                'parse_mode': parse_mode
+            }
+            
+            response = requests.post(url, json=payload, timeout=10)
+            data = response.json()
+            
+            return {'success': data.get('ok', False)}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}

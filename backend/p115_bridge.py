@@ -69,13 +69,15 @@ class P115Service:
     
     def start_qr_login(self, 
                       login_app: str = 'web',
-                      login_method: str = 'cookie') -> Dict[str, Any]:
+                      login_method: str = 'qrcode',
+                      app_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Start a QR code login session.
         
         Args:
             login_app: Device profile (web, ios, android, etc.)
-            login_method: 'cookie' or 'open_app'
+            login_method: 'qrcode', 'cookie', or 'open_app'
+            app_id: Third-party App ID (required for open_app method)
         
         Returns:
             Dict with sessionId and qrcode URL
@@ -85,12 +87,17 @@ class P115Service:
             
             session_id = str(uuid.uuid4())
             
-            # Get device app_id for the requested profile
-            app_id = ALL_DEVICE_PROFILES.get(login_app, 8)  # Default to web
+            # 确定使用的 app_id
+            if login_method == 'open_app' and app_id:
+                # 第三方应用模式：使用用户提供的 App ID
+                actual_app_id = int(app_id) if isinstance(app_id, str) and app_id.isdigit() else app_id
+            else:
+                # 普通扫码模式：根据 login_app 获取预设的 app_id
+                actual_app_id = ALL_DEVICE_PROFILES.get(login_app, 8)  # Default to web
             
             # Create login instance from cloud115.loginApp
             if hasattr(p115client, 'cloud115'):
-                login_instance = p115client.cloud115.loginApp(app_id=app_id)
+                login_instance = p115client.cloud115.loginApp(app_id=actual_app_id)
             else:
                 # Fallback: create basic login instance
                 login_instance = p115client.P115Client(login_method='qrcode')
@@ -103,7 +110,8 @@ class P115Service:
                 'login_instance': login_instance,
                 'login_method': login_method,
                 'login_app': login_app,
-                'app_id': app_id,
+                'app_id': actual_app_id,
+                'third_party_app_id': app_id if login_method == 'open_app' else None,
                 'started_at': datetime.now(),
                 'status': 'pending'
             }
